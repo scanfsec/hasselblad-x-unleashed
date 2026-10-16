@@ -1,0 +1,38 @@
+name: osx
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        runner: [ macos-15, macos-15-intel ]
+        env:
+          - { NAME: "nothing" }
+          - { NAME: "cmake", WITH_GRAPHICS: 1, WITH_X265: 1, WITH_AOM: 1, WITH_LIBDE265: 1 }
+          - { NAME: "libde265 (1) / x265 / graphics", WITH_GRAPHICS: 1, WITH_X265: 1, WITH_LIBDE265: 1 }
+    env: ${{ matrix.env }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/install-ci-osx.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Run tests
+      run: |
+        ./scripts/run-ci.sh

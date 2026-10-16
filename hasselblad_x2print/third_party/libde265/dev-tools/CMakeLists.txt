@@ -1,0 +1,24 @@
+set(tool_targets
+  gen-enc-table
+  yuv-distortion
+  rd-curves
+  block-rate-estim
+  tests
+  bjoentegaard
+  mt-decode-test
+)
+
+set(gen-enc-table_SOURCES gen-entropy-table.cc)
+set(yuv-distortion_SOURCES yuv-distortion.cc)
+set(rd-curves_SOURCES rd-curves.cc)
+set(block-rate-estim_SOURCES block-rate-estim.cc)
+set(tests_SOURCES tests.cc test-add-residual.cc test-intrapred.cc test-transform.cc test-dequant.cc test-deblk.cc test-cabac.cc)
+set(bjoentegaard_SOURCES bjoentegaard.cc)
+set(mt-decode-test_SOURCES mt-decode-test.cc)
+
+foreach(tool ${tool_targets})
+  add_executable(${tool} ${${tool}_SOURCES})
+  target_link_libraries(${tool} PRIVATE de265)
+endforeach()
+
+install(TARGETS ${tool_targets} DESTINATION ${CMAKE_INSTALL_BINDIR})

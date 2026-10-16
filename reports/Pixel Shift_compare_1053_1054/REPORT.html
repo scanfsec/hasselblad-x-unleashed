@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B0001053 / B0001054 同尺寸细节比较</title>
+<style>
+body{background:#11161c;color:#e8edf2;font:16px/1.7 system-ui,sans-serif;margin:32px}main{max-width:1180px;margin:auto}h1{font-size:28px}h2{margin-top:32px;font-size:21px}a{color:#8bded3}table{border-collapse:collapse;width:100%}td,th{padding:9px;text-align:left;border-bottom:1px solid #34404c}button,select{font:inherit;background:#263340;color:#fff;border:1px solid #566573;padding:7px 12px;border-radius:5px}label{margin-right:16px;display:inline-block;margin-bottom:10px}.note{color:#b3c2d1}.result{background:#203330;border-left:4px solid #7bd5c4;padding:14px 18px}.viewer{overflow:auto;background:#0a0d10;border:1px solid #34404c}#compare{display:block;max-width:none;image-rendering:pixelated}#compare.fit{width:100%;height:auto}.overview{max-width:100%;height:auto}code{color:#ffda9e}li{margin:8px 0}</style>
+<main>
+<h1>B0001053 / B0001054 同尺寸细节比较</h1>
+<p class="note">2026-10-16 · 已下载两张照片的 3FR 和 HEIC · 四文件 SHA-256 与相机一致 · 原文件未修改 · 原始 3FR / HEIC / 中间数据不随仓库分发，仅保留压缩后的比较图像</p>
+<div class="result"><strong>结论：1053 的输出像素数约为 1054 的四倍，但这组样本没有显示出明确的真实细节增益。</strong><br>同区域观察，1053 的颗粒更细、边缘更平滑，部分织物边界更柔；没有看到稳定新增、可辨的细纤维。RAW 绿色通道采用相同处理后，也没有显示出明确优势。因此不能把本组结果称为“已验证四亿像素解析力”，也不能仅凭两张成片认定传感器没有位移。</div>
+<h2>原文件</h2>
+<table><tr><th>项目</th><th>1053：Pixel Shift 合成</th><th>1054：普通单张</th></tr>
+<tr><td>HEIC 尺寸</td><td>23310 × 17482（407.51 MP）</td><td>11656 × 8742（101.90 MP）</td></tr>
+<tr><td>HEIC 编码</td><td>10 位，4:2:0，8×6 瓦片</td><td>10 位，4:2:0，4×3 瓦片</td></tr>
+<tr><td>RAW 存储</td><td>23310×17482，16 位单通道 CFA</td><td>11904×8842，16 位单通道 CFA（含传感器边界）</td></tr>
+<tr><td>ISO / 镜头焦距</td><td>6400 / 100 mm</td><td>6400 / 100 mm</td></tr>
+<tr><td>记录的曝光时间 / 光圈</td><td>0.00929 s / f4.74</td><td>0.01000 s / f4.8</td></tr>
+<tr><td>拍摄时间</td><td>20:13:07</td><td>20:17:27</td></tr>
+<tr><td>3FR</td><td>819,400,704 字节</td><td>213,864,448 字节</td></tr>
+<tr><td>HEIC</td><td>132,702,208 字节</td><td>56,125,440 字节</td></tr></table>
+<h2>400% / 800% 比较</h2>
+<p><strong>左：1054 普通单张；右：1053 Pixel Shift。</strong>先将两者配准到 1053 的同一坐标和画面范围，再同时放大。1054 只做一次双三次重采样；400% / 800% 显示均使用最近邻，不额外锐化。此处百分比以统一后的四亿像素网格为基准，800% 图没有比 400% 图新增内容。</p>
+<label>区域 <select id="region"><option value="back_center">靠背中央</option><option value="back_left">靠背左侧</option><option value="seat_center">座垫中央</option><option value="back_border">靠背边缘</option></select></label>
+<label>输入 <select id="kind"><option value="">HEIC 成片</option><option value="_raw">RAW 绿色通道</option></select></label>
+<label>放大 <select id="zoom"><option value="400pct">400%</option><option value="800pct">800%</option><option value="context">100% 周边区域</option></select></label>
+<label><input id="fit" type="checkbox" checked>适应页面</label>
+<p class="note">取消“适应页面”后按生成的 PNG 像素原尺寸显示，可横向滚动；浏览器自身缩放应为 100%。直接打开 PNG 时同样选择查看器的 100%，避免二次缩放。</p>
+<p><a id="direct" href="back_center_400pct.png">打开当前完整 PNG</a></p>
+<div class="viewer"><img id="compare" class="fit" src="back_center_400pct.png" alt="左单张、右像素偏移同区域比较"></div>
+<h2>配准与观察</h2><ul>
+<li>HEIC：4330 个 RANSAC 内点，整体比例约 1.999933，残差中位数约 0.448 个四亿图像素；四个区域再做小于 1 像素的平移修正，没有局部拉伸、锐化或生成细节。</li>
+<li>HEIC 四区灰度相关系数约 0.9935–0.9949。高相关只说明相同纹理已对齐，不是解析力或位移成功率指标。</li>
+<li>RAW：独立配准 3658 个内点，残差中位数约 0.363 个四亿图像素。仅比较绿色通道：按各自 CFA 相位读取绿色采样，减去 LibRaw 识别的黑电平，在缺失位置做相同双线性绿色重建，统一线性范围与 γ=1/2.2。不应用白平衡、色彩矩阵、锐化或降噪。这是细节诊断，不是完整 RAW 显影。</li>
+<li>HEIC 比较使用同一库将 10 位解码到 8 位 RGB 展示；RAW 从 16 位采样计算，再以相同曲线显示为 8 位 PNG。不是码值精度测试。</li>
+<li>在选取区域里，1053 的 HEIC 平均亮度比 1054 低约 5–6%；展示保留此差异，没有逐图拉伸对比度。曝光时间及显影参数有差异，不能把亮暗差当作细节提升。</li>
+</ul>
+<img class="overview" src="regions_overview.jpg" alt="四个分析区域的位置">
+<h2>这组比较能确认什么</h2><p>可以确认文件输出尺寸、同场景的实际观感，以及移除后期锐化/白平衡差异后 RAW 绿色细节的表现。不能据此确定传感器步进幅度、六帧是否正确落到预设相位、镜头实际解析极限，或给出有效像素数、MTF、解析力提升倍数。ISO 6400、织物深度变化、两次拍摄对焦/微动以及不同的前处理也会影响结果。</p>
+<p>若继续定位，应检查这次六帧的真实相对位移、帧序与 CFA 落点及合成前后的边缘；最终两张文件不足以把问题唯一归因到电机、合成或显影。</p>
+<h2>可复核数据与脚本</h2><p>四文件哈希见 <a href="camera-sha256.txt">camera-sha256.txt</a> / <a href="local-sha256.txt">local-sha256.txt</a>；配准与元数据 JSON 不随仓库分发。</p>
+<p>创建/使用的分析脚本：<a href="inspect_images.py">inspect_images.py</a>、<a href="compare_pixels.py">compare_pixels.py</a>、<a href="compare_raw.py">compare_raw.py</a>。参考了旧 resolution_check/compare.py、dcam_check/check_3fr.py、dcam_check/exif_dump.py 和 dump_3fr.py 的文件读取及配准方法；没有改动相机拍摄源码或 SSD 文件。</p>
+</main><script>
+const region=document.getElementById('region'),kind=document.getElementById('kind'),zoom=document.getElementById('zoom'),fit=document.getElementById('fit'),picture=document.getElementById('compare'),direct=document.getElementById('direct');
+function update(){const file=region.value+kind.value+'_'+zoom.value+'.png';picture.src=file;direct.href=file;picture.classList.toggle('fit',fit.checked)}
+[region,kind,zoom,fit].forEach(e=>e.addEventListener('change',update));
+</script></html>

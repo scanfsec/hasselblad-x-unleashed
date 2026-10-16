@@ -1,0 +1,176 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#include "functions.h"
+
+static const LC3_FLOAT* mdct_window(LC3_INT length, LC3PLUS_FrameDuration frame_dms, LC3_INT hrmode)
+{
+    if (frame_dms == LC3PLUS_FRAME_DURATION_10MS) {
+        switch (length) {
+        case 80:
+            return MDCT_WINS_10ms[hrmode][0];
+        case 160:
+            return MDCT_WINS_10ms[hrmode][1];
+        case 240:
+            return MDCT_WINS_10ms[hrmode][2];
+        case 320:
+            return MDCT_WINS_10ms[hrmode][3];
+        case 480:
+            return MDCT_WINS_10ms[hrmode][4];
+        case 960:
+            return MDCT_WINS_10ms[hrmode][5];
+        default:
+            return NULL;
+        }
+    }
+    else if (frame_dms == LC3PLUS_FRAME_DURATION_7p5MS) {
+        switch (length) {
+        case 60:
+            return MDCT_WINS_7_5ms[hrmode][0];
+        case 120:
+            return MDCT_WINS_7_5ms[hrmode][1];
+        case 180:
+            return MDCT_WINS_7_5ms[hrmode][2];
+        case 240:
+            return MDCT_WINS_7_5ms[hrmode][3];
+        case 360:
+            return MDCT_WINS_7_5ms[hrmode][4];
+        case 720:
+            return MDCT_WINS_7_5ms[hrmode][5];
+        default:
+            return NULL;
+        }
+    }
+    else if (frame_dms == LC3PLUS_FRAME_DURATION_5MS) {
+        switch (length) {
+        case 40:
+            return MDCT_WINS_5ms[hrmode][0];
+        case 80:
+            return MDCT_WINS_5ms[hrmode][1];
+        case 120:
+            return MDCT_WINS_5ms[hrmode][2];
+        case 160:
+            return MDCT_WINS_5ms[hrmode][3];
+        case 240:
+            return MDCT_WINS_5ms[hrmode][4];
+        case 480:
+            return MDCT_WINS_5ms[hrmode][5];
+        default:
+            return NULL;
+        }
+    }
+    else if (frame_dms == LC3PLUS_FRAME_DURATION_2p5MS) {
+        switch (length) {
+        case 20:
+            return MDCT_WINS_2_5ms[hrmode][0];
+        case 40:
+            return MDCT_WINS_2_5ms[hrmode][1];
+        case 60:
+            return MDCT_WINS_2_5ms[hrmode][2];
+        case 80:
+            return MDCT_WINS_2_5ms[hrmode][3];
+        case 120:
+            return MDCT_WINS_2_5ms[hrmode][4];
+        case 240:
+            return MDCT_WINS_2_5ms[hrmode][5];
+        default:
+            return NULL;
+        }
+    }
+#ifdef CR9_C_ADD_1p25MS
+    else if (frame_dms == LC3PLUS_FRAME_DURATION_1p25MS) {
+        switch (length) {
+        case 10:
+            return MDCT_WINS_1_25ms[hrmode][0];
+        case 20:
+            return MDCT_WINS_1_25ms[hrmode][1];
+        case 30:
+            return MDCT_WINS_1_25ms[hrmode][2];
+        case 40:
+            return MDCT_WINS_1_25ms[hrmode][3];
+        case 60:
+            return MDCT_WINS_1_25ms[hrmode][4];
+#ifdef CR14_A_ADD_1p25MS_HR
+        case 120:
+            return MDCT_WINS_1_25ms[hrmode][5];
+#endif
+        default:
+            return NULL;
+        }
+    }
+#endif
+    return NULL;
+}
+
+void mdct_init(Mdct* mdct, LC3_INT length, LC3PLUS_FrameDuration frame_dms, LC3_INT fs_idx, LC3_INT hrmode)
+{
+    switch (frame_dms)
+    {
+#ifdef CR9_C_ADD_1p25MS
+      case LC3PLUS_FRAME_DURATION_1p25MS:
+        mdct->leading_zeros = MDCT_la_zeroes_1_25ms[fs_idx];
+        break;
+#endif
+      case LC3PLUS_FRAME_DURATION_2p5MS:
+        mdct->leading_zeros = MDCT_la_zeroes_2_5ms[fs_idx];
+        break;
+      case LC3PLUS_FRAME_DURATION_5MS:
+        mdct->leading_zeros = MDCT_la_zeroes_5ms[fs_idx];
+        break;
+      case LC3PLUS_FRAME_DURATION_7p5MS:
+        mdct->leading_zeros = MDCT_la_zeroes_7_5ms[fs_idx];
+        break;
+      case LC3PLUS_FRAME_DURATION_10MS:
+        mdct->leading_zeros = MDCT_la_zeroes[fs_idx];
+        break;
+      case LC3PLUS_FRAME_DURATION_UNDEFINED:
+        assert(!"invalid frame_ms");
+    }
+
+    mdct->length     = length;
+    mdct->mem_length = length - mdct->leading_zeros;
+    mdct->window     = mdct_window(length, frame_dms, hrmode);
+    mdct->mem        = calloc(mdct->mem_length, sizeof(*mdct->mem));
+    dct4_init(&mdct->dct, length);
+}
+
+void mdct_free(Mdct* mdct)
+{
+    if (mdct) {
+        free(mdct->mem);
+        dct4_free(&mdct->dct);
+        memset(mdct, 0, sizeof(*mdct));
+    }
+}
+
+void mdct_apply(const LC3_FLOAT* input, LC3_FLOAT* output, Mdct* mdct)
+{
+    LC3_FLOAT tmp[MAX_LEN * 2];
+    LC3_INT   i;
+    LC3_INT hlen;
+
+    move_float(tmp, mdct->mem, mdct->mem_length);
+    move_float(tmp + mdct->mem_length, input, mdct->length);
+    zero_float(tmp + mdct->length * 2 - mdct->leading_zeros, mdct->leading_zeros);
+    move_float(mdct->mem, tmp + mdct->length, mdct->mem_length);
+
+    mult_vec(tmp, mdct->window, mdct->length * 2);
+
+    hlen = mdct->length / 2;
+    for (i = 0; i < hlen; i++) {
+        output[i]        = -tmp[hlen * 3 - i - 1] - tmp[hlen * 3 + i];
+        output[hlen + i] = tmp[i] - tmp[hlen * 2 - i - 1];
+    }
+
+    move_float(tmp, output, mdct->length);
+
+    dct4_apply(&mdct->dct, tmp, output);
+}
+
+void processMdct_fl(LC3_FLOAT* in, LC3_FLOAT* out, Mdct* mdctStruct) { mdct_apply(in, out, mdctStruct); }

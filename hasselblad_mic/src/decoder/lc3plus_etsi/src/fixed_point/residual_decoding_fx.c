@@ -1,0 +1,292 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#include "functions.h"
+
+#ifdef ENABLE_HR_MODE /* HRMODE enables packing of residual bits */
+
+void processResidualDecoding_fx(Word32 x[], Word16 x_e, Word16 L_spec, UWord8 prm[], 
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                                Word32 resQBits                   
+#else
+                                Word16 resQBits
+#endif
+#ifdef ENABLE_HR_MODE
+                                , Word16 hrmode
+#endif
+#ifdef CR9_C_ADD_1p25MS
+                                , LC3PLUS_FrameDuration frame_dms 
+#endif
+)
+{
+    Counter i;
+    Word32  fac_m, fac_p;
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+    Word32 bits;
+#else
+    Word16 bits;
+#endif
+    Word16  s;
+    Word32  tmp;
+    Counter idx;
+    Word16 N_nz = 0;
+#if defined (CR9_C_ADD_1p25MS) || defined (ENABLE_HR_MODE)
+    Word16 iter = 0;    move16();
+    Word16 maxIter = 1; move16();
+    UNUSED(maxIter);
+#endif
+    Word32 fac_hr;
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_In("processResidualDecoding_fx", sizeof(struct {
+                   Counter i;
+                   Word32  fac_m, fac_p;
+                   Word16  s, bits;
+                   Word32  tmp;
+                   Counter idx;
+                   Word16 N_nz;
+                   Word16 *nz_idx;
+                   Word16 iter;
+               }));
+#endif
+
+    tmp = 0;
+    s   = sub(x_e, 1);
+    s = s_min(s, 31);
+
+    IF (hrmode)
+    {
+        fac_hr = L_shr(0x10000000, s); /* 0.25 in 1Q30 */
+    }
+    ELSE
+    {
+        fac_m = L_shr(0xC000000, s);  /* 0.1875 in 1Q30 */
+        fac_p = L_shr(0x14000000, s); /* 0.3125 in 1Q30 */
+        
+#if defined (CR9_C_ADD_1p25MS)
+        IF (sub(frame_dms, LC3PLUS_FRAME_DURATION_1p25MS) == 0)
+        {
+            maxIter = 3;
+        }                    
+#endif
+    }
+
+    bits = 0;
+    move16();
+
+     Word16 nz_idx[MAX_LEN];
+
+    IF (hrmode)
+    {
+        FOR (i = 0; i < L_spec; i++)
+        {
+            IF (x[i])
+            {
+                nz_idx[N_nz] = i; move16();
+                N_nz = add(N_nz, 1);
+            }
+        }
+        FOR (iter = 0; iter < EXT_RES_ITER_MAX; iter++)
+        {
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+            IF (L_sub(bits, resQBits) >= 0)
+#else
+            IF (sub(bits, resQBits) >= 0)
+#endif
+            {
+                BREAK;
+            }
+            FOR (i = 0; i < N_nz; i++)
+            {
+                idx = nz_idx[i]; move16();
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                IF (L_sub(bits, resQBits) >= 0)
+#else
+                IF (sub(bits, resQBits) >= 0)
+#endif
+                {
+                    BREAK;
+                }
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                IF( !( s_and( prm[L_shr( bits, RESBITS_PACK_SHIFT )], shl( 1, s_and( bits, RESBITS_PACK_MASK ) ) ) ) )
+#else
+                IF (! (s_and(prm[shr(bits, RESBITS_PACK_SHIFT)], shl(1, s_and(bits, RESBITS_PACK_MASK)))))
+#endif
+                {
+                    tmp = L_sub_sat(x[idx], fac_hr);
+                }
+                ELSE
+                {
+                    tmp = L_add_sat(x[idx], fac_hr);
+                }
+                x[idx] = tmp;
+                move32();
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                bits = L_add(bits, 1);
+#else
+                bits = add(bits, 1);
+#endif
+            }
+            fac_hr = L_shr(fac_hr, 1);
+        }
+    }
+    ELSE
+    {
+    #if defined (CR9_C_ADD_1p25MS)
+        WHILE (iter < maxIter)
+    #endif
+    {
+        FOR (i = 0; i < L_spec; i++)
+        {
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+            IF (L_sub(bits, resQBits) >= 0)
+#else
+            IF (sub(bits, resQBits) >= 0)
+#endif
+            {
+                BREAK;
+            }
+
+            IF (x[i] != 0)
+            {
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                IF( !( s_and( prm[L_shr( bits, RESBITS_PACK_SHIFT )], shl( 1, s_and( bits, RESBITS_PACK_MASK ) ) ) ) )
+#else
+                IF (! (s_and(prm[shr(bits, RESBITS_PACK_SHIFT)], shl(1, s_and(bits, RESBITS_PACK_MASK)))))
+#endif
+                {
+                    if (x[i] > 0)
+                        tmp = L_sub(x[i], fac_m);
+                    if (x[i] < 0)
+                        tmp = L_sub(x[i], fac_p);
+                }
+                ELSE
+                {
+                    if (x[i] > 0)
+                        tmp = L_add(x[i], fac_p);
+                    if (x[i] < 0)
+                        tmp = L_add(x[i], fac_m);
+                }
+                x[i] = tmp;
+                move32();
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+                bits = L_add(bits, 1);
+#else
+                bits = add(bits, 1);
+#endif
+            }
+        }
+    #if defined (CR9_C_ADD_1p25MS)
+            iter++;
+            fac_p = L_shr(fac_p, 1);
+            fac_m = L_shr(fac_m, 1);
+    #endif
+    }
+    }
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_Out();
+#endif
+}
+
+#else
+
+void processResidualDecoding_fx(Word32 x[], Word16 x_e, Word16 L_spec, UWord8 prm[], Word16 resQBits
+#ifdef CR9_C_ADD_1p25MS
+                                , LC3PLUS_FrameDuration frame_dms 
+#endif
+)
+{
+
+    Counter i;
+    Word32  fac_m, fac_p;
+    Word16  s, bits;
+    Word32  tmp;
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_In("processResidualDecoding_fx", sizeof(struct {
+                   Counter i;
+                   Word32  fac_m, fac_p;
+                   Word16  s, bits;
+                   Word32  tmp;
+               }));
+#endif
+
+#if defined (CR9_C_ADD_1p25MS)
+    Word16 iter = 0;    move16();
+    Word16 maxIter = 1; move16();
+    UNUSED(maxIter);
+#endif
+
+    tmp = 0;
+    s   = sub(x_e, 1);
+    s = s_min(s, 31);
+
+    {
+        fac_m = L_shr(0xC000000, s);  /* 0.1875 in 1Q30 */
+        fac_p = L_shr(0x14000000, s); /* 0.3125 in 1Q30 */
+    }
+    
+#if defined (CR9_C_ADD_1p25MS)
+        IF (sub(frame_dms, LC3PLUS_FRAME_DURATION_1p25MS) == 0)
+        {
+            maxIter = 3;
+        }                    
+#endif
+
+    bits = 0;
+    move16();
+    
+    #if defined (CR9_C_ADD_1p25MS)
+        WHILE (iter < maxIter)
+    #endif
+    {
+        FOR (i = 0; i < L_spec; i++)
+        {
+            IF (sub(bits, resQBits) >= 0)
+            {
+                BREAK;
+            }
+
+            IF (x[i] != 0)
+            {
+                IF (prm[bits] == 0)
+                {
+                    if (x[i] > 0)
+                        tmp = L_sub(x[i], fac_m);
+                    if (x[i] < 0)
+                        tmp = L_sub(x[i], fac_p);
+                }
+                ELSE
+                {
+                    if (x[i] > 0)
+                        tmp = L_add(x[i], fac_p);
+                    if (x[i] < 0)
+                        tmp = L_add(x[i], fac_m);
+                }
+                x[i] = tmp;
+                move32();
+                bits = add(bits, 1);
+            }
+        }
+    #if defined (CR9_C_ADD_1p25MS)
+            iter++;
+            fac_p = L_shr(fac_p, 1);
+            fac_m = L_shr(fac_m, 1);
+    #endif
+    }
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_Out();
+#endif
+}
+
+#endif

@@ -1,0 +1,22 @@
+name: lint
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  licensecheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        sudo apt install -qq licensecheck
+
+    - name: Check licenses
+      run: |
+        ./scripts/check_licenses.sh

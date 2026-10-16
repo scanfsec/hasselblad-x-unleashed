@@ -1,0 +1,108 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#include "defines.h"
+#include "functions.h"
+
+void processPreEmphasis_fx(Word32 *d2_fx, Word16 *d2_fx_exp, Word16 fs_idx, Word16 n_bands, LC3PLUS_FrameDuration frame_dms, lc3_scratch_t scratch)
+{
+    Word16        s;
+    Word32        nrg;
+    Word16        smax;
+    Counter       band;
+    const Word16 *pre_emph;
+    const Word16 *pre_emph_e;
+    Word16 *      d2_band_fx_exp;
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_In("processPreEmphasis_fx", sizeof(struct {
+                   Word16        s;
+                   Word32        nrg;
+                   Word16        smax;
+                   Counter       band;
+                   const Word16 *pre_emph;
+                   const Word16 *pre_emph_e;
+                   Word16 *      d2_band_fx_exp;
+               }));
+#endif
+
+    d2_band_fx_exp = (Word16*) lc3_scratch_push( scratch, sizeof( *d2_band_fx_exp ) * n_bands );
+
+    pre_emph   = lpc_lin_pre_emphasis[fs_idx];
+    pre_emph_e = lpc_lin_pre_emphasis_e[fs_idx];
+    SWITCH (frame_dms)
+    {
+#ifdef CR9_C_ADD_1p25MS
+        case LC3PLUS_FRAME_DURATION_1p25MS:
+#ifdef FIX_PLC_CONFORM_ISSUES
+            pre_emph   = lpc_lin_pre_emphasis_1_25ms[fs_idx];
+            pre_emph_e = lpc_lin_pre_emphasis_e_1_25ms[fs_idx];
+#endif
+            BREAK;
+#endif
+        case LC3PLUS_FRAME_DURATION_2p5MS: 
+            pre_emph   = lpc_lin_pre_emphasis_2_5ms[fs_idx];
+            pre_emph_e = lpc_lin_pre_emphasis_e_2_5ms[fs_idx];
+            BREAK;
+        case LC3PLUS_FRAME_DURATION_5MS:
+            pre_emph   = lpc_lin_pre_emphasis_5ms[fs_idx];
+            pre_emph_e = lpc_lin_pre_emphasis_e_5ms[fs_idx];
+            BREAK;
+        case LC3PLUS_FRAME_DURATION_7p5MS:
+            pre_emph   = lpc_lin_pre_emphasis_7_5ms[fs_idx];
+            pre_emph_e = lpc_lin_pre_emphasis_e_7_5ms[fs_idx];
+            BREAK;
+        case LC3PLUS_FRAME_DURATION_10MS:
+            BREAK;
+        case LC3PLUS_FRAME_DURATION_UNDEFINED: assert(0);
+    }
+    
+#ifdef FIX_PLC_CONFORM_ISSUES
+    ASSERT(n_bands == 20 || n_bands == 30 || n_bands == 40 || n_bands == 60 || n_bands == 80);
+#else
+    ASSERT(n_bands == 20 || n_bands == 40 || n_bands == 60 || n_bands == 80);
+#endif
+
+    /* start processing */
+    smax = -31; move16();
+
+    FOR (band = 0; band < n_bands; band++)
+    {
+        nrg = Mpy_32_16(d2_fx[band], pre_emph[band]);
+
+        if (nrg == 0)
+        {
+            s = 31; move16();
+        }
+
+        if (nrg != 0)
+        {
+            s = norm_l(nrg);
+        }
+
+        d2_fx[band]          = L_shl_pos(nrg, s);        move32();
+        d2_band_fx_exp[band] = sub(pre_emph_e[band], s); move16();
+
+        smax = s_max(smax, d2_band_fx_exp[band]);
+    }
+
+/* Rescale band energies */
+    FOR (band = 0; band < n_bands; band++)
+    {
+        d2_fx[band] = L_shr_pos(d2_fx[band], s_min(sub(smax, d2_band_fx_exp[band]), 31)); move32();
+    }
+    /* Save common exponent for all bands */
+    *d2_fx_exp = add(*d2_fx_exp, smax); move16();
+  
+    d2_band_fx_exp = (Word16*) lc3_scratch_pop( scratch, d2_band_fx_exp );
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_Out();
+#endif
+}

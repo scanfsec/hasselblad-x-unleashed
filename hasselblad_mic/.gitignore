@@ -1,0 +1,46 @@
+# Build artifacts
+build/
+artifacts/
+docs/
+
+# Binaries and libraries
+*.so
+*.dll
+*.exe
+src/micsock_etsi
+src/micsock_orig
+src/micsock_e
+
+# Backup files
+*.bak*
+*.pre_*
+*~
+
+# Windows BT tools (large, not needed in repo)
+tools/winbt/
+
+# Debug dumps
+*.bin
+*.wav
+*.raw
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Debug logs
+*.log
+*.bin
+*.wav
+
+# Temp files
+*.tmp
+*.bak

@@ -1,0 +1,223 @@
+name: libnl3-ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  NLTST_IN_CI: 1
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:40
+    steps:
+      - name: Install packages
+        run: |
+          sudo dnf install -y \
+            clang-tools-extra \
+            git
+
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Setup git
+        run: |
+          git config --global --add safe.directory "$PWD"
+
+      - name: Formatting with clang-format
+        run: |
+          clang-format --version
+          ./tools/clang-format.sh -n
+
+  ci:
+    strategy:
+      matrix:
+        include:
+          - cc: gcc
+          - cc: clang
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get -y --no-install-recommends install \
+            check \
+            valgrind \
+            libtool-bin
+
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+
+      - name: Lint Python
+        if: ${{ matrix.cc == 'gcc' }}
+        run: |
+          python3 -m pip install flake8
+          flake8 . --count --show-source --statistics
+
+      - name: Code formatting with Python black
+        if: ${{ matrix.cc == 'gcc' }}
+        run: |
+          python3 -m pip install black==22.12.0
+          black --check .
+
+      - name: Build
+        run: |
+          set -x
+
+          export CC="${{ matrix.cc }}"
+          export CFLAGS="-DNL_MORE_ASSERTS=1000 -O2 -Werror -std=gnu11 -fexceptions"
+          CONFIGURE_ARGS=
+          if [ "$CC" = "clang" ]; then
+                  CFLAGS="$CFLAGS -Wno-error=unused-command-line-argument -Wno-error=unused-function"
+                  export LDFLAGS="-Wl,--no-undefined-version,--fatal-warnings"
+                  CONFIGURE_ARGS="--enable-debug=no"
+          else
+                  export LDFLAGS="-Wl,--no-undefined-version"
+          fi
+
+          ./autogen.sh
+          ./configure $CONFIGURE_ARGS
+          make -j 15
+        shell: bash
+
+      - name: Build Unit Tests
+        run: |
+          make -j 15 check-build
+
+      - name: Run Unit Tests
+        run: |
+          set -x
+          export NLTST_SEED_RAND=
+          for i in `seq 1 5`; do
+            tests/check-direct
+            tests/check-all
+            make -j 15 check || (cat ./test-suite.log; false)
+          done
+
+      - name: Run Unit Tests w/Valgrind
+        run: |
+          set -x
+          export NLTST_SEED_RAND=
+          CK_FORK=no libtool --mode=execute valgrind --error-exitcode=66 --leak-check=full -s --show-leak-kinds=all ./tests/check-direct
+          CK_FORK=no libtool --mode=execute valgrind --error-exitcode=66 --leak-check=full -s --show-leak-kinds=all ./tests/check-all
+        shell: bash
+
+      - name: Install packages for Release
+        run: |
+          python3 -m pip install \
+            asciidoc \
+            graphviz \
+            pygments
+          sudo apt-get -y --no-install-recommends install \
+            doxygen \
+            graphviz \
+            mscgen \
+            source-highlight
+
+      - name: Build Release
+        run: |
+          set -x
+          git clean -fdx
+          export CC="${{ matrix.cc }}"
+          NO_GPG_SIGN=1 ./tools/build_release.sh BuildAll
+
+      - name: Build out-of-tree and disable-static
+        run: |
+          set -x
+          git clean -fdx
+          export CC="${{ matrix.cc }}"
+          export CFLAGS="-Werror -std=gnu11 -fexceptions"
+          if [ "$CC" = "clang" ]; then
+                  CFLAGS="$CFLAGS -Wno-error=unused-command-line-argument -Wno-error=unused-function"
+          fi
+
+          ./autogen.sh
+          mkdir build
+          cd build
+          ../configure --disable-static
+          make -j 15
+          make -j 15 check-build
+          export NLTST_SEED_RAND=
+          make -j 15 check || (cat ./test-suite.log; false)
+
+      - name: Link with mold
+        run: |
+          sudo apt-get -y --no-install-recommends install \
+            mold
+          git clean -fdx
+          export LDFLAGS="-fuse-ld=mold -Wl,--fatal-warnings"
+          ./autogen.sh
+          ./configure
+          make -j 15 V=1
+
+      - run: echo "🍏 This job's status is ${{ job.status }}."
+
+  ci-alpine:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:latest
+    steps:
+      - name: Install packages
+        run: |
+          apk add \
+            autoconf \
+            automake \
+            bash \
+            bison \
+            check-dev \
+            flex \
+            gcc \
+            git \
+            libtool \
+            linux-headers \
+            make \
+            musl-dev \
+            pkgconfig
+
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Setup git
+        run: |
+          git config --global --add safe.directory "$PWD"
+
+      - name: Build
+        run: |
+          set -x
+
+          export CC="${{ matrix.cc }}"
+          export CFLAGS="-DNL_MORE_ASSERTS=1000 -O2 -Werror -std=gnu11 -fexceptions"
+          if [ "$CC" = "clang" ]; then
+                  CFLAGS="$CFLAGS -Wno-error=unused-command-line-argument -Wno-error=unused-function"
+                  export LDFLAGS="-Wl,--no-undefined-version,--fatal-warnings"
+          else
+                  export LDFLAGS="-Wl,--no-undefined-version"
+          fi
+
+          ./autogen.sh
+          ./configure
+          make -j 15
+
+      - name: Build Unit Tests
+        run: |
+          make -j 15 check-build
+
+      - name: Run Unit Tests
+        run: |
+          set -x
+          export NLTST_SEED_RAND=
+          for i in `seq 1 5`; do
+            tests/check-direct
+            # unshare() does not work (EPERM). This test currently cannot pass
+            # (odd).
+            # tests/check-all
+            # make -j 15 check || (cat ./test-suite.log; false)
+          done

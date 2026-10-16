@@ -1,0 +1,36 @@
+name: fuzzer
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  fuzzer:
+    env:
+      WITH_AOM: 1
+      WITH_GRAPHICS: 1
+      WITH_LIBDE265: 1
+      WITH_X265: 1
+      FUZZER: 1
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/install-ci-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Run tests
+      run: |
+        ./scripts/run-ci.sh

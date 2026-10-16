@@ -1,0 +1,85 @@
+name: lint
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  cpplint:
+    env:
+      CPPLINT: 1
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/install-ci-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Check format
+      run: |
+        ./scripts/run-ci.sh
+
+  c-api-headers:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install compilers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc clang
+
+    - name: Check that public headers are valid C
+      run: |
+        ./scripts/check-c-headers.sh
+
+  api-symbols:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install build tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++
+
+    - name: Check that all declared API functions are defined in the library
+      run: |
+        ./scripts/check-api-symbols.sh
+
+  licenses:
+    env:
+      CHECK_LICENSES: 1
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/install-ci-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Check licenses
+      run: |
+        ./scripts/run-ci.sh

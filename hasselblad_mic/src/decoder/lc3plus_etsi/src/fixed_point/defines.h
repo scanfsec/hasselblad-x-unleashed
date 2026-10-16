@@ -1,0 +1,995 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#ifndef DEFINES_H
+#define DEFINES_H
+
+//#    define VERBOSE_SCRATCH_ALLOC
+
+#ifdef DEBUG
+#  if 0
+#    define VERBOSE_SCRATCH_ALLOC
+#  endif
+#endif
+
+#ifdef VERBOSE_SCRATCH_ALLOC
+#    define lc3_scratch_push( x, y ) _lc3_scratch_push( x, y, __func__, __FILE__, __LINE__ )
+#    define lc3_scratch_pop( x, y )  _lc3_scratch_pop( x, y, __func__, __FILE__, __LINE__ )
+#endif
+
+#ifndef DISABLE_HR_MODE
+#  define ENABLE_HR_MODE
+#endif
+
+#ifdef ENABLE_HR_MODE
+#  define MAX_BW_HR 960
+#endif
+
+#ifdef ENABLE_HR_MODE
+#  define extractW16(a) extract_h(a)
+#else
+#  define extractW16(a) (a)
+#endif
+
+#define MAX_BR 320000        /*      400 * 800 */
+
+/* FUNCTION MACROS */
+/* NB, divisions in some of these MACROs, use mainly for initial setup, do not use in loops */
+#define CEILING(x, y) (((x) + (y)-1) / (y))
+
+#define FRAME2FS_IDX(x) (x / 100) /*   80 -> 0, 160 -> 1, 240 -> 2, 320 -> 3, 480 -> 4 */
+#ifdef ENABLE_HR_MODE
+#define FS2FS_IDX( x )            ( ( x ) == 96000 ? 5 : ( ( x ) == 192000 ? 6 : ( x ) / 10000 ) ) /* 8000 -> 0, 16000 -> 1, 24000 -> 2, 32000 -> 3, 48000 -> 4, 96000 -> 5, 192000 -> 6 */
+#else
+#  define FS2FS_IDX(x) (x / 10000)  /*   8000 -> 0, 16000 -> 1, 24000 -> 2, 32000 -> 3, 48000 -> 4 */
+#endif
+
+#define UNUSED(x) (void)(x)       /* silence unused parameter warning */
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define STATIC_ASSERTS(cond, s) typedef char assert_##s[(cond) ? 1 : -1]
+#define STATIC_ASSERTI(cond, i) STATIC_ASSERTS(cond, i)
+#define STATIC_ASSERT(cond) STATIC_ASSERTI(cond, __LINE__)
+#define TRACE(x) PRINTF("%s:%i %s = %i\n", __FILE__, __LINE__, #x, (int)(x))
+
+/* For dynamic memory calculations */
+#define CODEC_FS(fs) ((fs) == 44100 ? 48000 : (fs))
+
+#define DYN_MAX_LEN(fs) (CODEC_FS(fs) / 100)
+#define DYN_MAX_LEN_EXT(fs) MAX(CODEC_FS(fs) / 100, 160) /* extension to length 160 for NB(fs=8000)    */
+#define DYN_MAX_LPROT(fs) ((512 * (CODEC_FS(fs) / 100)) / 320)
+
+#define DYN_MAX_PLOCS(fs) (DYN_MAX_LPROT(fs) / 4 + 1)
+#define DYN_MAX_MDCT_LEN(fs) (DYN_MAX_LEN(fs) - (180 * DYN_MAX_LEN(fs) / 480))
+
+#define MAX_PITCH_FS(fs) (CEILING((MAX_PITCH_12K8 * CODEC_FS(fs)), (12800)))
+
+/*  get the maximum buffer size assuming 10 ms framing */
+/*  MAX_PITCH was previously always  the highest fs in the current  SUBSET , i.e. typically 48 kHz  */
+/*  now fs(from incoming wav file)  adaptive  MAX_PITCH_FS(fs) is used instead  */
+#define DYN_MAX_LEN_PCM_PLC_CLASSIFIER(fs)                                                                             \
+    (MAX_PITCH_FS(fs) + DYN_MAX_LEN(fs)) /* CLASSIFIER PCM memory requirement   */
+#define DYN_MAX_LEN_PCM_PLC_TDCAPPLYFILTER(fs)                                                                         \
+    ((M + 1) + MAX_PITCH_FS(fs) + (DYN_MAX_LEN(fs) / 2)) /* TDC filtering PCM memory requirement */
+
+#ifdef ENABLE_HR_MODE
+#  define DYN_MAX_LEN_PCM_PLC(fs) (MAX_PITCH_FS(fs) + DYN_MAX_LEN(fs))
+#else
+#  define DYN_MAX_LEN_PCM_PLC(fs) MAX(DYN_MAX_LEN_PCM_PLC_CLASSIFIER(fs), DYN_MAX_LEN_PCM_PLC_TDCAPPLYFILTER(fs))
+#endif
+
+#define SCRATCH_BUFFER_ALIGNMENT      4
+#define SCRATCH_BUFFER_ALIGNMENT_BITS 2
+#define SCRATCH_ALLOCATOR_NORMAL_OPERATION 0
+#define SCRATCH_ALLOCATOR_CALCULATE_MAX    1
+
+#define FRAME_MS_BLOCK 25
+
+/* OPTIONS */
+#define ENABLE_ADVANCED_PLC
+#define ENABLE_ADVANCED_PLC_DEFAULT
+#define ENABLE_BW_CONTROLLER
+#define ENABLE_ERROR_PROTECTION
+#define ENABLE_RFRAME
+#define ENABLE_PC
+#define ENABLE_PLC
+#define ENABLE_PADDING
+/* flags */
+#define ENABLE_BANDWIDTH_FLAG
+#define ENABLE_RBANDWIDTH_FLAG
+#define ENABLE_EP_MODE_FLAG
+#define ENABLE_FRAME_MS_FLAG
+
+#define CR9_C_ADD_1p25MS
+#define CR12_B_STOP_DC_RINGING   
+#define CR12_D_FIX_BITRATE_LIMITS   
+#define CR13_B_FIX_PC_BINS
+#define CR13_C_RESET_CLASSIFIER_AFTER_BAD_FRAMES
+
+#ifndef NO_POST_REL_CHANGES
+/* Post-release non-bitexact changes */
+#define CR14_A_ADD_1p25MS_HR
+#define CR14_B_REMOVE_FLOAT_IN_BASOP_CODE
+
+#ifdef ENABLE_HR_MODE
+#  define CR14_A_ADD_LOSSLESS_MODE
+#  define G192_BITSTREAM_SPLIT
+#  define CR15_C_VARIOUS_LOSSLESS_FIXES
+
+#  define CR15_D_LL_INCL_HPVC   /*   HPVC arith. coder variant for Lossless TCX */
+
+#  ifdef CR15_D_LL_INCL_HPVC
+#    define LL_INCL_HPVC
+#    define LL_INCL_HPVC_ARICODEC                 /* enable jointTCX+HPVC TX in ari_codec ENC */
+#    define LL_INCL_HPVC_ARICODEC_DEC             /* enable jointTCX+HPVC TX in ari DEC */
+#    define LL_HPVC_GLOBAL_FRAC                   /* fractional ternary HPVC global flag */
+#    define LL_HPVC_KP_FRAC                       /* fractional Kp table */
+#    define LL_HPVC_ALIGN_STARTCOEFF_TO_LASTNZ
+#    define LL_HPVC_EXPORT_TCX_BITRATE
+
+#    define LL_HPVC_LOWEST_FS         96000
+#    define LL_HPVC_N_SIGNAL          64
+#    define N_SIGNAL_LOG              6           /* log2(LL_HPVC_N_SIGNAL) */
+#    define LL_HPVC_NB_NP             2           /* N_SIGNAL=64 -> NB_NP=2 (64,128 -> 2) */
+#    define LL_HPVC_MIN_RANGE         8
+#    define LL_HPVC_MAX_RANGE         12
+#    define LL_HPVC_BW_STARTA_FB10MS  (4*64)      /* = 256 */
+#    define LL_HPVC_BW_STARTB_FB10MS  (5*64)      /* = 320 */
+
+#    define NP_LOG_MIN                N_SIGNAL_LOG          /* = 6 */
+#    define NP_LOG_MAX                7
+#    define TOPH                      (NP_LOG_MAX - NP_LOG_MIN)
+#    define LL_HPVC_NB_BLOCKTYPE      (LL_HPVC_NB_NP+1)
+#    define LL_HPVC_NP_MIN            (1<<NP_LOG_MIN)       /* = 64 */
+#    define LL_HPVC_NP_MAX            (1<<NP_LOG_MAX)       /* = 128 */
+#    define LL_HPVC_KP_MAX            36
+#    define LL_HPVC_NS_MAX            16
+#    define LL_HPVC_NSHDR_MAX         3
+
+#    define LL_HPVC_ADD_LEAF_SPLIT
+#    define LL_HPVC_SPLITRULE_GLOBAL_MAX    3
+#    define LL_HPVC_SPLITRULE_GLOBAL_NSMIN  3
+
+#    define LL_HPVC_GLOBCOST_Q9_TCX        (212)
+#    define LL_HPVC_GLOBCOST_Q9_MIXED      (3<<9)
+
+#    define LL_INCL_HPVC_UPDATES              /* updated code for mainly reducing WMOPS */
+#    ifdef LL_INCL_HPVC_UPDATES
+#      define LL_INCL_HPVC_OPT_AR_ENCODE     /* refactored ARI ENCODE CODE loop for lower WMOPS, flattened code for now kept for 2-tuples */
+#      ifdef  LL_INCL_HPVC_OPT_AR_ENCODE
+#        define  LL_INCL_HPVC_OPT_AR_ENCODE_FIX
+#      endif
+#      define LL_INCL_HPVC_FIX_RANGE_PREC    /* 128 table values + 8 postcheck was insufficient for 1/255, added xtra postcheck */
+#      define LL_INCL_HPVC_UNIW32_OPT        /* lower av-WMOPS, by identifying whole bits path */
+#      define LL_INCL_HPVC_AC_UNI_DECODE_FAST /* optimized wider binary split testing of the cdf boundaries */
+#      define HPVC_APPLY_TREE_LIMIT
+
+#      define HPVC_NOMTREE_COUNT_FB          7   /* constant for FB reduced for 96,192 */
+#      define HPVC_MAXTREE_LIMIT
+#      ifdef HPVC_MAXTREE_LIMIT
+#        define HPVC_MAXTREE_LIMIT_FB        7   /* constant for FB reduced for 192 */
+#      endif
+#      define HPVC_CORRECT7p5_START
+#      define HPVC_CORRECT7p5_START_PLUS
+
+#      define LL_HPVC_REQ_BIT_GAIN_PER_CEOFF_Q9 ((Word32)(64/512.0*(1<<9)))  /* 64/512 bits per coef, somewhat more aggressive per block */
+#    else
+#      define LL_HPVC_REQ_BIT_GAIN_PER_CEOFF_Q9 ((Word32)(1.0/512.0*(1<<9))) /* 1/512 bits per coef */
+#    endif
+
+#    define LL_HPVC_REQ_BIT_GAIN_GLOBAL_Q9     ((Word32)(0.125*(1<<9)))
+
+     /* #    define LL_INCL_HPVC_DEBUG              */
+     /* #    define LL_INCL_HPVC_DEBUG_MORE         */
+     /* #    define LL_INCL_HPVC_ARICODEC_DEBUG_SYNC*/
+     /* #    define LL_INCL_HPVC_ARICODEC_WRITE_SYNC*/
+     /* #    define LL_HPVC_SEGMENT_FILE_LOG        */
+     /* #    define LL_HPVC_FORCE_LEGACY_TCX_ENC    */
+     /* #    define LL_HPVC_FORCE_NP_TCX_ENC        */
+     /* #    define LL_HPVC_FORCE_NP_TCX_SKIP_TX_ENCDEC */
+     /* #    define LL_HPVC_FORCE_NP_TCX_TX_OLDPATH */
+     /* #    define LL_HPVC_FORCE_NP_TCX_RX_OLDPATH */
+
+
+#    define W32_UNI_RANGE_BITS_MAX 8       /* 8 bits or lower supported */
+#    define AC_ENCODE_UNI_FX_TAB128        /* odd-divisor ROM 1/1..1/255 for uniform vCDF encoding */
+#    define AC_DECODE_UNI_FX_TAB128        /* divisor ROM 1/128..1/255 for decoder search */
+#    define HPVC_PVQ_MAX_VEC_SIZE  LL_HPVC_NP_MAX
+#    define HPVC_KMAX_FX           36      /* N=8 leaf maximum */
+#  endif /* CR15_D_LL_INCL_HPVC */
+#endif
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+#  define CR15_A_LOSSLESS_1p25MS
+#endif
+
+#endif /* NO_POST_REL_CHANGES Post-release changes */
+
+#ifdef CR9_C_ADD_1p25MS
+#  define CR9_C_ADD_1p25MS_LRSNS
+#  define ENABLE_12p5_DMS_MODE
+#  define NOISEFILLWIDTH_1_25MS 1
+#  define NOISEFILLSTART_1_25MS 6
+
+#  define CR9_C_ADD_1p25MS_NOISEFILLING
+#  define CR9_1p25MS_SNS_TILT
+#  define CR9_1p25MS_SNS_TILT_FIX_DELTA_AD_LINE
+
+#  define PLC34_ATTEN_FAC_125_FX   32752
+
+#  define LTPF_ADAPTIVE_GAIN
+
+#  ifdef LTPF_ADAPTIVE_GAIN
+#    define LTPF_PITCH_STABILITY_THRESHOLD  5         /* Number of frames for which the pitch must be constant for adaptive gain and pitch correction to be applied */
+#    define LTPF_ADAPTIVE_GAIN_RATE         20        /* Number of frames it must take to reach maximum beta from the default value, provided the pitch remains constant */
+
+#    define LTPF_ADAPTIVE_GAIN_WITH_NORM_CORR
+#  endif
+
+/* integration fixes for 1p25  */
+#ifdef CR9_C_ADD_1p25MS
+#  define FIX_BASOP_ENC_QUANTIZE_1P25MS_512KBPS  /* add  two last MDCT coeffs into the last quadruple for global_gain _xmax_ and energy  analysis    */
+ 
+
+#  define FIX_BOTH_1p25_WB_GLOBGAINOFFSET_NONBE   /* 1p25 curve tilt calulation corrected and made into BASOP, WB had a loss of of HF in the range 211-260 kbps   */ 
+#  define FIX_BOTH_1p25_WB_GLOBGAINOFFSET_LOWLIM_NONBE  -135   /* 1p25 curve tilt calulation limited to value   -135   kbps   */
+
+#  define    FIX_BOTH_1p25_TEST_NEW_GG_EST2               /*  GG_EST2_will use bands with two coeffs in each  instead of four, for 1p25 WB and 1p25 SSWB , note only active for  regular, hrmode==0  */
+
+#  ifdef FIX_BOTH_1p25_TEST_NEW_GG_EST2 
+#    define    FIX_BASOP_1p25_NEW_GG_EST3                 /*  GG_EST3 ,  GG_EST2 with optimized code for better BASOP code reuse  , less changes to non 1p25ms */
+#    define    FIX_BOTH_1p25_GG_EST_SWB_FB                /*  1.25ms  GG_EST  update for SWB/FB, better RD curve  float and BASOP , active for hrmode==0 */
+#  endif
+
+/* defines to activate 2 or 3 tuple 1.25ms loops for  WB,SSWB,SWB,FB  */
+#  define FIX_1p25_GG_EST_TUPLES   /*  1.25 ms GG_EST2_will use 2,3 or 4 , note only active for  regular, hrmode==0  */
+#  ifdef FIX_1p25_GG_EST_TUPLES
+#  define  GG_1p25_WB_TUPLES     2
+#  define  GG_1p25_SSWB_TUPLES   2
+#  define  GG_1p25_SWB_TUPLES    2
+#  define  GG_1p25_FB_TUPLES     3 
+#  define  GG_1p25_MAX_TUPLES    MAX(MAX(GG_1p25_WB_TUPLES ,GG_1p25_SSWB_TUPLES  ), MAX(GG_1p25_SWB_TUPLES ,GG_1p25_FB_TUPLES))     /* used to control common energy loop */
+#  define FIX_1p25_32kHz_CLANG_WARNING_EST_GAIN
+
+#  ifndef     FIX_BOTH_1p25_ALLOC_SPECTRUM  
+#   define    FIX_BOTH_1p25_ALLOC_SPECTRUM  
+#     endif 
+
+#define    FIX_1p25_FLEX_ITER_TUPLE_LOOP        /* energy loop part optimized BASOP only */
+#define    LOG2_LC_APPROX                       /* log2_LC(energy) call BASOP only */ /* only applied to 1p25 ms global gain estimation loop */
+#define    FIX_1p25_FLEX_BISECT_LOOP            /* bisect optimization BASOP only  !! */
+
+# endif 
+
+#  define FIX_LTPFDEC_BASOP                               /* added saturation and apply L_max()  */
+
+/* all 1p25ms  precision optimizations */
+
+#  define FIX_BASOP_ENC_LRSNS_CBC_MSE            /* recalculate CB_C MSE to better match CFL cbC vs st2 decision    */
+#  define FIX_BASOP_ENC_LRSNS_ST2FULL_PROJ       /* less optimistic pre-projection for Y_FULL ,  better match CFL     */
+
+#  define FIX_BASOP_LT_NORMCORR_AR1              /*    better exact representation of 0.8 LT normcorr  limit        */
+#  define FIX_BASOP_PREEMPH_CALC                 /* only1p25ms higher precision in adaptive preemphasis addition , average increase by ~6dB,  minSNR increased  by  ~1dB  */
+
+# define FIX_SNS_BASOP_MEAN64_CALC             /* norm for all energy bands to reduce SCF  target variations before log2 domain */ 
+# ifdef FIX_SNS_BASOP_MEAN64_CALC
+# define FIX_SNS_BASOP_NF_APPL               /* apply noisefill 1/10000  in the W32*exp energy domain, not in the inexact 1/9998  W16Q9  log2 domain */
+# endif
+# define FIX_SNS_BASOP_MEAN16_APPLY            /* norm for all 16 scg log2  bands to reduce SCF target variations */ 
+
+#endif
+
+#ifdef CR9_C_ADD_1p25MS_LRSNS 
+  /*NB CR9_C_ADD_1p25MS_LRSNS   requires NEW_SIGNALLING_SCHEME_1p25 */
+#   define LRSNS_PC_SIGNAL_FIX              /*correct handling of incoming bfi==2 to DEC_ENTROPY for conformance */
+/*  #define USE_LC3_OPERATORS */
+
+#   define LRSNS_10MS_BFISIGNAL_FIX          /* correct signaling of detected BER in both 10ms SNS/and in 1.25ms LRSNS */
+
+#  define LRSNS_ALLZERO_FIX               /* BASOP_Util_InvLog2_pos(), incorrect  exponent for 2^0,  became appearant for an all zero vector in LRSNS CB_A */
+#  define LRSNS_MORE_SCRATCH              /* set BASOP SCRATCH to max values  */
+/*  #define LRSNS_CBC_NO_LTPF_DEPENDENCY   */    /* turn off LRSNS CB_C dependency on LTPF activation flag */
+
+#  define SNSLR_N_FIXENV   4              /* 4 fix envelopes multiplexed inside  the full codeword */
+#  define SNSLR_N_FIXENV_SHIFTS   4       /* 2 bits */
+#  define SNSLR_MAX_PVQ_CAND  6           /* splitLF(0), full(1), fixed_env 2+{0,1,2,3 },  */
+#  define SNSLR_MAX_PVQ_SEARCH_CAND (SNSLR_MAX_PVQ_CAND-SNSLR_N_FIXENV+1)     /* 3 = splitLF(0), full(1), fixed_envs(2), */
+#  define SNS_IDX_SHAPEJ 2               /* shape index location */
+
+#endif
+
+
+#   define FIX_LTPF_PITCH_1p25
+#   define FIX_LTPF_MEM_CONTINUATION
+#   define FIX_LTPF_PITCH_MEM_LEN
+#   define FIX_PLC_CONFORM_ISSUES
+#   define FIX_TDC_BURST_ERROR
+#   define FIX_LTPF_DEC_FLFX_MISMATCH
+#   define FIX_TX_RX_STRUCT_STEREO
+#   define NEW_SIGNALLING_SCHEME_1p25
+#   define FIX_LTPF_1p25
+
+#endif /* CR9_C_ADD_1p25MS */
+
+#  ifdef CR9_C_ADD_1p25MS
+#    define LEN_MEM_NORMCORR 5
+#  else
+#    define LEN_MEM_NORMCORR 2
+#  endif
+
+#      define THRESH_100_DMS_TDC_CNT    9
+#      define THRESH_100_DMS_NS_CNT     7
+#      define THRESH_100_DMS_TDC_NS_CNT 73
+#      define THRESH_075_DMS_TDC_CNT    7
+#      define THRESH_075_DMS_NS_CNT     7
+#      define THRESH_075_DMS_TDC_NS_CNT 87
+#      define THRESH_050_DMS_TDC_CNT    22
+#      define THRESH_050_DMS_NS_CNT     15
+#      define THRESH_050_DMS_TDC_NS_CNT 141
+#      define THRESH_025_DMS_TDC_CNT    20
+#      define THRESH_025_DMS_NS_CNT     21
+#      define THRESH_025_DMS_TDC_NS_CNT 278
+#  define PLC_LONGTERM_ANALYSIS_MS 200         /* Nominal analysis window 2000 ms   */
+#  define PLC_LONGTERM_ANALYSIS_STARTUP_FILL  (Word16)(0.5*32768.0)     /* 16384/32768 == 0.5 required buffer fill amount, set to 0.0 to not require any fill at all */
+
+#define REL_PITCH_THRESH 11796
+
+#  define MIN_BR_100DMS   16000  /*       20 * 800 * 100/100  */
+#    ifdef SUBSET_NB
+#      define MAX_BR_100DMS_NB   114400  /* for 100ms at  8kHz */
+#    endif
+#    ifdef SUBSET_WB
+#      define MAX_BR_100DMS_WB   221600  /* for 100ms at 16kHz */
+#    endif
+#    ifdef SUBSET_SSWB
+#      define MAX_BR_100DMS_SSWB 314400  /* for 100ms at 24kHz */
+#    endif
+
+/* G192 bitstream writing/reading */
+#define G192_GOOD_FRAME 0x6B21
+#define G192_BAD_FRAME 0x6B20
+#define G192_REDUNDANCY_FRAME 0x6B22
+#define G192_ZERO 0x007F
+#define G192_ONE 0x0081
+#define READ_G192FER      /* allow C executable to also read G192 formatted FER files */
+
+#ifdef DEBUG
+#ifdef READ_G192FER
+#  define  READ_G192_FER_BYTE  /* Allow C executable to also read G192 byte formatted FER files  0x20=BAD , 0x21=Good  */
+#endif
+#endif
+
+
+#define DYNMEM_COUNT
+#define STAMEM_COUNT
+
+
+/*
+do not change  __forceinline  for mex compilation using  gcc6.3.0 or larger
+  gcc630 supported by MATLAB 2018b, via Mingw "app"
+  */
+#ifdef __GNUC__
+#  define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#else
+#  define GCC_VERSION 0
+#endif
+
+/* SUBSETS */
+#if !(defined(SUBSET_NB) || defined(SUBSET_WB) || defined(SUBSET_SSWB) || defined(SUBSET_SWB) || defined(SUBSET_FB) || defined(SUBSET_UB))
+#  define SUBSET_NB
+#  define SUBSET_WB
+#  define SUBSET_SSWB
+#  define SUBSET_SWB
+#  define SUBSET_FB
+#  ifdef ENABLE_HR_MODE
+#    define SUBSET_UB
+#  endif
+#  ifdef CR14_A_ADD_LOSSLESS_MODE
+#    define SUBSET_UUB
+#  endif
+#endif
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+
+#define MIN_BR_025DMS_192KHZ_HR ( (int) 249600 / 3200 / 2 ) * 3200  /* 198400 + 2 * (198400 - 172800) */
+#ifdef CR15_A_LOSSLESS_1p25MS
+#define MIN_BR_125DMS_192KHZ_HR ( (int) 249600 / 6400 / 2 ) * 6400  /* 198400 + 2 * (198400 - 172800) */
+#endif
+#define MIN_BR_050DMS_192KHZ_HR ( (int) 225600 / 1600 / 2 ) * 1600  /* 174400 + 2 * (174400 - 148800) */
+#define MIN_BR_075DMS_192KHZ_HR ( (int) 199200 / 800 / 2 ) * 800    /* 149600 + 2 * (149600 - 124800) */
+#define MIN_BR_100DMS_192KHZ_HR ( (int) 199200 / 800 / 2 ) * 800
+
+#ifdef SUBSET_UUB
+#  define MAX_NBYTES_LOSSLESS    7000
+#else
+#  define MAX_NBYTES_LOSSLESS    4000
+#endif 
+
+#undef MAX_BW_HR
+#define MAX_BW_HR 1920
+
+#define LOSSLESS_192kHz
+#ifdef LOSSLESS_192kHz
+#define HIGH_BANDS_NUMBER 12
+#endif
+#define LOSSLESS_MDCT_FX
+#define LOSSLESS_MDCT_FX2
+#define NEW_HRMODE_MDCT_INPUT
+#define RATE_FLAG_TUNING
+#define LOSSLESS_FALLBACK
+#define PADDING_CBR
+#define LOSSLESS_MDCT
+#define LOSSLESS_RESBITS_RESTRUCTURE
+#define ADAPTIVE_TNS /* Estimate if TNS enables lossless.  */
+#define ADAPTIVE_TNS_H
+#define LOSSLESS_CBR
+
+#endif /* CR14_A_ADD_LOSSLESS_MODE */
+
+#  define MIN_BR_100DMS   16000  /*       20 * 800 * 100/100  */
+#  define MIN_BR_025DMS   64000          /*       20 * 800 * 100/ 25  */
+#  define MIN_BR_050DMS   32000          /*       20 * 800 * 100/ 50  */
+#  define MAX_BR_050DMS_NB   260800  /*      163 * 800 * 100/ 50  */
+#    ifdef SUBSET_NB
+#      define MAX_BR_100DMS_NB   114400  /* for 100ms at  8kHz */
+#    endif
+#    ifdef SUBSET_WB
+#      define MAX_BR_100DMS_WB   221600  /* for 100ms at 16kHz */
+#    endif
+#    ifdef SUBSET_SSWB
+#      define MAX_BR_100DMS_SSWB 314400  /* for 100ms at 24kHz */
+#    endif
+
+#  ifdef CR9_C_ADD_1p25MS
+#    define MIN_BR_0125DMS   128000  /*       20 * 800 * 100/ 12.5  */
+#    define MAX_BR_0125DMS   512000
+#  endif
+
+#  define MIN_BR_075DMS_48KHZ_HR ((int)124800/ 800/2)* 800
+#  define MIN_BR_075DMS_96KHZ_HR ((int)149600/ 800/2)* 800
+#  define MIN_BR_075DMS   21334 /* ceil( 20 * 800 * 100/ 75) */
+#  define MAX_BR_075DMS  426667 /* ceil(400 * 800 * 100/ 75) */
+#  define MAX_BR_075DMS_NB   152534  /* ceil(143 * 800 * 100/ 75) */
+#  define MAX_BR_075DMS_WB   295467  /* ceil(277 * 800 * 100/ 75) */
+#  define MAX_BR_075DMS_SSWB 419200  /* ceil(393 * 800 * 100/ 75) */
+
+#  define NOISEFILLWIDTH_7_5MS 2
+#  define NOISEFILLSTART_7_5MS 18
+
+#define PACK_RESBITS
+
+/* FRAME/BUFFER */
+#ifdef SUBSET_UUB
+#  define MAX_LEN 1920 /* = 10ms at 192kHz */
+#elif defined SUBSET_UB
+#  define MAX_LEN 960 /* = 10ms at 96kHz */
+#elif defined SUBSET_FB
+#  define MAX_LEN 480 /* = 10ms at 48kHz */
+#elif defined(SUBSET_SWB)
+#  define MAX_LEN 320 /* = 10ms at 32kHz */
+#elif defined(SUBSET_SSWB)
+#  define MAX_LEN 240 /* = 10ms at 24kHz */
+#elif defined(SUBSET_WB)
+#  define MAX_LEN 160 /* = 10ms at 16kHz */
+#elif defined(SUBSET_NB)
+#  define MAX_LEN 80 /* = 10ms at 8kHz */
+#endif
+
+#ifdef ENABLE_HR_MODE
+#  define ENABLE_FFT_RESCALE
+#  define ENABLE_FFT_30X16
+#  define ENABLE_DCTIV_RESCALE
+
+#  define EXT_RES_ITER_MAX 20
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+#  define MAX_RESBITS 48000
+#else
+#  define MAX_RESBITS 5000
+#endif
+#  define HR_MODE_SCRATCH_SIZE 60
+#else /* ENABLE_HR_MODE */
+#  define MAX_RESBITS MAX_LEN
+#endif /* ENABLE_HR_MODE */
+
+/* BW Cutoff-Detection */
+#define MAX_BW_BANDS_NUMBER 5
+
+#ifdef ENABLE_HR_MODE
+#  define RESBITS_PACK_SHIFT 3
+#  define RESBITS_PACK_N (1<<(RESBITS_PACK_SHIFT))
+#  define RESBITS_PACK_MASK (RESBITS_PACK_N - 1)
+#  define MAX_RESBITS_LEN ((MAX_RESBITS + RESBITS_PACK_MASK) >> RESBITS_PACK_SHIFT)
+#  define MAX_RESBITS_LEN_32BIT_ALIGN (((MAX_RESBITS_LEN + 3)/4)*4)
+#else /* ENABLE_HR_MODE */
+#  define MAX_RESBITS_LEN (MAX_RESBITS)
+#  define MAX_RESBITS_LEN_32BIT_ALIGN (((MAX_RESBITS_LEN + 3)/4)*4)
+#endif /* ENABLE_HR_MODE */
+
+#define MAX_CHANNELS 2
+#define MIN_NBYTES      20  /*  100dms:  16  kbps at !=44.1kHz,  14.7kbps at 44.1kHz
+                                 50dms:  32  kbps at !=44.1kHz,  29.4kbps at 44.1kHz
+                                 25dms:  64  kbps at !=44.1kHz,  58.8kbps at 44.1kHz */
+#define MAX_NBYTES_025 100  /* any dms: 320  kbps at !=44.1kHz, 294  kbps at 44.1kHz */
+#define MAX_NBYTES_050 200  /* any dms: 320  kbps at !=44.1kHz, 294  kbps at 44.1kHz */
+#define MAX_NBYTES_075 400  /* any dms: 320  kbps at !=44.1kHz, 294  kbps at 44.1kHz */
+#define MAX_NBYTES_100 400  /* any dms: 320  kbps at !=44.1kHz, 294  kbps at 44.1kHz */
+#ifdef ENABLE_HR_MODE
+#    define MIN_BR_125MS_48KHZ_HR ((int)204800/6400/2)*6400
+#    define MIN_BR_125MS_96KHZ_HR ((int)230400/6400/2)*6400
+#    define MIN_BR_25MS_48KHZ_HR ((int)172800/3200/2)*3200
+#    define MIN_BR_25MS_96KHZ_HR ((int)198400/3200/2)*3200
+#    define MIN_BR_50MS_48KHZ_HR ((int)148800/1600/2)*1600
+#    define MIN_BR_50MS_96KHZ_HR ((int)174400/1600/2)*1600
+#    define MIN_BR_100MS_48KHZ_HR ((int)124800/800/2)*800
+#    define MIN_BR_100MS_96KHZ_HR ((int)149600/800/2)*800
+#  define MAX_NBYTES_RED_HR 625 /* From table 5.2 */
+#  define BYTESBUFSIZE (MAX_NBYTES_RED_HR * LC3PLUS_MAX_CHANNELS)
+#else
+#  define BYTESBUFSIZE (MAX_NBYTES_100 * LC3PLUS_MAX_CHANNELS)
+#endif
+#define MAX_BW_BIN 400
+#define FEC_SLOT_BYTES_MIN 40
+#  define FEC_SLOT_BYTES_MAX 400
+#  ifdef CR12_D_FIX_BITRATE_LIMITS
+#    ifdef ENABLE_HR_MODE
+#      define FEC_SLOT_BYTES_MIN_125DMS_48KHZ_HR 40
+#      define FEC_SLOT_BYTES_MIN_125DMS_96KHZ_HR 40
+#      define FEC_SLOT_BYTES_MIN_025DMS_48KHZ_HR 54
+#      define FEC_SLOT_BYTES_MIN_025DMS_96KHZ_HR 61
+#      define FEC_SLOT_BYTES_MIN_050DMS_48KHZ_HR 87
+#      define FEC_SLOT_BYTES_MIN_050DMS_96KHZ_HR 101
+#      define FEC_SLOT_BYTES_MIN_075DMS_48KHZ_HR 110
+#      define FEC_SLOT_BYTES_MIN_075DMS_96KHZ_HR 126
+#      define FEC_SLOT_BYTES_MIN_100DMS_48KHZ_HR 140
+#      define FEC_SLOT_BYTES_MIN_100DMS_96KHZ_HR 164
+#    endif
+#  endif
+#if MAX_BW_BIN > MAX_LEN
+#  define MAX_BW MAX_LEN
+#else
+#  define MAX_BW MAX_BW_BIN
+#endif
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+#  define NUM_SAMP_FREQ 8
+#  define NUM_OFFSETS 8
+#else
+#  define NUM_SAMP_FREQ 6
+#  define NUM_OFFSETS 7
+#endif
+
+/* SCF */
+#define M 16 /* LPC_ORDER */
+#define MAX_BANDS_NUMBER 64
+#define MAX_BANDS_NUMBER_PLC 80
+#define PVQ_MAX_VEC_SIZE M
+#define KMAX_FX 10 /* N=10  */
+#define K_OUTL_FAR 6
+#define MPVQ_SZ_OUTL_FAR (1549824U >> 1)
+#define TOTBITS_SHAPE OUTL_FAR(1.0 + 19.5637)
+#define SQRT_EN_MAX_FX 64 /*  table size, for fast  inv_sqrt  */
+#define N_SETA 10
+#define N_SETB (PVQ_MAX_VEC_SIZE - N_SETA)
+
+#define SNS_DAMPING 27853        /* 0.85 in Q15 */
+#ifdef ENABLE_HR_MODE
+#  define SNS_DAMPING_HRMODE 19661 /* 0.6 in Q15 */
+#    define SNS_DAMPING_HRMODE_UB_10MS  6881 /* 0.21 in Q15 */
+#    define SNS_DAMPING_HRMODE_UB_7_5MS 5898 /* 0.18 in Q15 */
+#    define SNS_DAMPING_HRMODE_UB_5MS   4915 /* 0.15 in Q15 */
+#    define SNS_DAMPING_HRMODE_UB_2_5MS 4915 /* 0.15 in Q15 */
+#    define SNS_DAMPING_HRMODE_UB_1_25MS 4915 /* 0.15 in Q15 */
+#endif
+
+#ifdef CR9_C_ADD_1p25MS_LRSNS
+#define N_SCF_SEARCH_SHAPES_ST2_LR  SNSLR_MAX_PVQ_SEARCH_CAND  /* {split, full, fix} */
+#define NA_LR 5
+#define NB_LR 8
+#define NC_LR 2        /* the 2 remaining positions also coded by full*/
+#define NFULL_LR (NA_LR+NB_LR+NC_LR)
+
+#define PULSES_SPLIT_A_LR 6
+#define PULSES_SPLIT_B_LR 2
+#define PULSES_FULL_LR 5  /* 'full'== ABC region */
+
+#define N_CANDS_FIX_LR SNSLR_N_FIXENV
+#define NSIGNS_FIX_012 12                     /* 15-4+1 */
+#define N_SHIFT_FIX    SNSLR_N_FIXENV_SHIFTS
+#define NSIGNS_FIX_3   (NSIGNS_FIX_012 -2)
+#define N_SHIFT_FIX_3   SNSLR_N_FIXENV_SHIFTS
+
+
+
+#define SNSLR_NST1         170     /*,    3*170 + 2 = 512  */
+#define SNSLR_NPVQ_L5K6    1970     /*  mux into  11 bits 2048 pos , 78 slots remaining,  6 whole bits  */
+#define SNSLR_NPVQ_L5K8    5890      /*  additional split LF part muxed into 13 bits,   log2(5980)= 12.5241    */
+#define SNSLR_NPVQ_L8K2    128      /*  1+6 = 7  bits  */
+#define SNSLR_NPVQ_L15K5   207006L  /*  1+ 16.6593 bits  ,  */
+
+#define SNSLR_A_CNST_WEIGHT 28672   /* 0.875 */
+
+#define  SNS_VQ_MAX_IDX  8
+
+#endif /* CR9_C_ADD_LRSNS */
+
+/* PVQ VQ setup */
+#define VQMODES26                                                                                                      \
+    ((0 << 4) + (1 << 3) + (1 << 2) + (1 << 1) +                                                                       \
+     (1 << 0))                      /* select all shapes, including extended lf, and new far                           \
+                                              shape for MODE26, add extreme far mode not enabled */
+#define SCF_STAGE1_MAX_BITS (5 + 5) /* typically only (5+5) used */
+#define SCF_STAGE1_NBCDKENTRIES 32
+#define SCF_STAGE2_MAX_GAIN_BITS 2
+#define SCF_STAGE2_NB_MODE_BITS 1
+#define SCF_STAGE2_MAX_NB_SHAPES 3
+#define SCF_MAX_PARAM 7 /* (L+H) + submode_MSB +gain+(Ia_leads+Ia_mpvq)+(Ib_joint_mpvq), submode-LSB */
+#define SCF_MAX_PARAM_ST2 (SCF_MAX_PARAM - 2)
+#define N_SCF_SHAPES_ST2 4
+#define N_SCF_SHAPE_SETUPS 1
+
+/* ARITHMETIC ENCODER */
+#define NBITS_CONTEXT 8
+#define NBITS_RATEQ 2
+#define A_THRES_SHIFT 2
+#define A_THRES (1 << A_THRES_SHIFT)
+#define VAL_ESC 16
+#define SYM_BITS_Q 11
+
+/* NOISE FILLING */
+#define NOISEFILLWIDTH 3
+#define NOISEFILLSTART 24
+#define NOISEFILLWIDTH_5MS 1
+#define NOISEFILLSTART_5MS 12
+#define NOISEFILLWIDTH_2_5MS 1
+#define NOISEFILLSTART_2_5MS 6
+
+/* MDCT */
+#ifdef ENABLE_HR_MODE
+#  define TWIDDLE ((Word32)0x5a82799a)
+#else
+#  define TWIDDLE WORD322WORD16(0x5a82799a)
+#endif
+#define MDCT_MEM_LEN_MAX (MAX_LEN - ((180 * MAX_LEN) / 480))
+
+/* TNS */
+#define TNS_NUMFILTERS_MAX 2
+#define TNS_COEF_RES 17
+#define INDEX_SHIFT 8
+#define NSUBDIV 3
+#define MAXLAG 8
+
+/* OLPA/LTPF */
+#define LEN_12K8 128
+#define LEN_6K4 64
+#define MIN_PITCH_6K4 17
+#define MAX_PITCH_6K4 114
+#define RANGE_PITCH_6K4 98
+#define MIN_PITCH_12K8 32
+#define MAX_PITCH_12K8 228
+#define RES2_PITCH_12K8 157
+#define RES4_PITCH_12K8 127
+#define LTPF_MEMIN_LEN (MAX_PITCH_12K8 + 4)
+#define M_LTPF 24
+#define LTPF_MEM_X_LEN (MAX_LEN + MAX_LEN / 40 - 2)
+#define LTPF_MEM_Y_LEN (MAX_LEN + CEILING(MAX_PITCH_12K8 * MAX_LEN, 128) + (MAX_LEN / 80))
+
+/* PLC */
+#define PLC_FADEOUT_TYPE_1_IN_MS 200
+#define PLC_FADEOUT_IN_MS         60    /* fade-out to zero in ms for TD-PLC and NS, minimum value is 20 */
+                                                    /* table settings */
+#  define PLC2_FADEOUT_IN_MS_MIN        30          /* table min */
+#  define PLC2_FADEOUT_IN_MS_MAX        140         /* table max  */
+#  define PLC2_FADEOUT_RES   10                     /* 10 ms steps used in fade tables  */
+
+/* current settings */
+#  define PLC2_FADEOUT_LONG_IN_MS   120
+#  define PLC2_FADEOUT_IN_MS        30          /*  0 uses original constants for  PLC2
+                                           -1 uses TDC::PLC_FADEOUT_IN_MS as basis for a PLC2 macro-re-calculation
+                                           30..140 will use a separate settings for PLC2 fadeout
+                                             30: P800 short fade optimization
+                                             120: Mushra optimized  fade */
+
+
+
+#define PLC4_TRANSIT_END_IN_MS PLC_FADEOUT_IN_MS    /* end   of transition time for noise substitution */
+#define PLC4_TRANSIT_START_IN_MS  20    /* begin of transition time for noise substitution for voiced signals */
+#define PLC34_ATTEN_FAC_100_FX   0x4000 /* attenuation factor for NS and TDC @ 10  ms (0.5000)*/
+#define PLC34_ATTEN_FAC_050_FX   0x5A83 /* attenuation factor for NS and TDC @ 5.0 ms (0.7071)*/
+#define PLC34_ATTEN_FAC_025_FX   0x6BA3 /* attenuation factor for NS and TDC @ 2.5 ms (0.8409)*/
+#define PLC34_ATTEN_FAC_075_FX   0x4C1C /* attenuation factor for NS and TDC @ 7.5 ms (0.5946) */
+#define PLC3_HPBLENDTHROTTLE      30    /* higher numbers increase throttled blending from hp filtered to unfiltered uv excitation (0 is no throttle) */
+
+#define MAX_PITCH_8K (CEILING((MAX_PITCH_12K8 * 8000), (12800))) /*NB  was a risky MACRO   at 0.5 border !!,    */
+#define MAX_PITCH_16K ((MAX_PITCH_12K8 * 16000) / (12800))       /* exact integer */
+#define MAX_PITCH_24K                                                                                                  \
+    (CEILING((MAX_PITCH_12K8 * 24000), (12800)))           /* was a risky MACRO truncation at 0.5 border !! ,   */
+#define MAX_PITCH_32K ((MAX_PITCH_12K8 * 32000) / (12800)) /* exact integer */
+#define MAX_PITCH_48K ((MAX_PITCH_12K8 * 48000) / (12800)) /* exact integer */
+
+#ifdef ENABLE_HR_MODE
+#  define MAX_PITCH_96K ((MAX_PITCH_12K8 * 96000) / (12800)) /* exact integer */
+#endif
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+#  define MAX_PITCH_192K ((MAX_PITCH_12K8 * 192000) / (12800)) /* exact integer */
+#endif
+
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+#  define MAX_PITCH MAX_PITCH_192K
+#elif defined(ENABLE_HR_MODE)
+#  define MAX_PITCH MAX_PITCH_96K
+#elif defined(SUBSET_FB)
+#  define MAX_PITCH MAX_PITCH_48K
+#elif defined(SUBSET_SWB)
+#  define MAX_PITCH MAX_PITCH_32K
+#elif defined(SUBSET_SSWB)
+#  define MAX_PITCH MAX_PITCH_24K
+#elif defined(SUBSET_WB)
+#  define MAX_PITCH MAX_PITCH_16K
+#elif defined(SUBSET_NB)
+#  define MAX_PITCH MAX_PITCH_8K
+#endif
+
+
+/*  macri MAX_LEN_PCM_PLC  is used for WC memory  size checking
+   DYN_MAX_LEN_PCM_PLC(fs) is used by static memory buffers
+ */
+#define MAX_LEN_PCM_PLC (MAX_PITCH + MAX_LEN)
+
+#define TDC_L_FIR_HP 11
+#define TDC_L_FIR_LP 11
+
+#define BASE_LPROT 512 /* BASE Lprot set to 512 for 32 kHz sampling */
+
+#define LPROT48K (BASE_LPROT * 48 / 32) /* Fs based Lprot */
+#define LPROT40K (BASE_LPROT * 40 / 32) /* For Fs == 48000 only use 0 - 20000 Hz in 8 bands */
+#define LPROT32K BASE_LPROT
+#define LPROT24K (BASE_LPROT * 24 / 32)
+#define LPROT16K (BASE_LPROT * 16 / 32)
+#define LPROT8K (BASE_LPROT * 8 / 32)
+
+/* #define PHECU_XFP_LA  1 */ /* Original soluiton xfp generated with 1ms look ahead into MDCT memory
+                               ctrl.PhECU.LA = 0.001 * ctrl.fs; */
+/* #define PHECU_XFP_LA  4 */ /* Option with some lookahead 1/4 ms look ahead into MDCT memory
+                               ctrl.PhECU.LA = 0.001 * ctrl.fs / 4; */
+#define PHECU_XFP_LA                                                                                                   \
+    0 /* Option without lookahead 0 ms look ahead into MDCT memory                                                     \
+       ctrl.PhECU.LA = 0; */
+
+#if (PHECU_XFP_LA == 0)
+
+#  define PHECU_LA_48K 0 /* 0 ms */
+#  define PHECU_LA_32K 0 /* 0 ms */
+#  define PHECU_LA_24K 0 /* 0 ms */
+#  define PHECU_LA_16K 0 /* 0 ms */
+#  define PHECU_LA_8K 0  /* 0 ms */
+
+#  define MAX_PHECU_LA (0)
+
+#else
+#  if (PHECU_XFP_LA == 4)
+
+#    define PHECU_LA_48K (48 / 4) /* 0.25 ms */
+#    define PHECU_LA_32K (32 / 4) /* 0.25 ms */
+#    define PHECU_LA_24K (24 / 4) /* 0.25 ms */
+#    define PHECU_LA_16K (16 / 4) /* 0.25 ms */
+#    define PHECU_LA_8K (8 / 4)   /* 0.25 ms */
+
+#    define MAX_PHECU_LA (MAX_LEN / 10 / 4)
+
+#  else
+
+#    define PHECU_LA_48K 48 /* 1 ms */
+#    define PHECU_LA_32K 32 /* 1 ms */
+#    define PHECU_LA_24K 24 /* 1 ms */
+#    define PHECU_LA_16K 16 /* 1 ms */
+#    define PHECU_LA_8K 8   /* 1 ms */
+
+#    define MAX_PHECU_LA (MAX_LEN / 10)
+
+#  endif
+#endif
+
+
+/* (PHECU_LA_48K == 0) */
+
+#define COPY_LEN_8K 16
+#define COPY_LEN_16K 32
+#define COPY_LEN_24K 48
+#define COPY_LEN_32K 64
+#define COPY_LEN_48K 96
+
+#define OLA_LEN_8K 14
+#define OLA_LEN_16K 28
+#define OLA_LEN_24K 42
+#define OLA_LEN_32K 56
+#define OLA_LEN_48K 84
+
+#define LPROT48K_RED LPROT40K /* limit peak searched part of spectrum for FB */
+#define LPROT32K_RED LPROT32K /* limit peak searched part of spectrum for SWB */
+#define LPROT24K_RED LPROT24K /* limit peak searched part of spectrum for HQ */
+#define LPROT16K_RED LPROT16K /* limit peak searched part of spectrum for SQ */
+#define LPROT8K_RED LPROT8K   /* limit peak searched part of spectrum for NB */
+
+#define INV_LPROT48K_Q22 5461  /* round(2^22/LPROT48K) , 1/6 */
+#define INV_LPROT32K_Q22 8192  /* round(2^22/LPROT32K) , 1/4 */
+#define INV_LPROT24K_Q22 10923 /* round(2^22/LPROT24K) , 1/3 */
+#define INV_LPROT16K_Q22 16384 /* round(2^22/LPROT16K) , 1/2 */
+#define INV_LPROT8K_Q22 32767  /* round(2^22/LPROT8K)  , 1/1 */
+
+#define LGW48K 8 /* 8 bands defined , but may the same frequency groups as for SWB(32k)   */
+#define LGW32K 7
+#define LGW24K 6
+#define LGW16K 5
+#define LGW8K 4
+
+#define MAX_LGW 9 /*  LGW48K + 1 !! */
+
+#define UNINIT_OR_UNSAFE_OOLD_SENTINEL -32768
+#define LTOT_INIT_FLAG -32768
+#define LTOT_MIN_MAN 1   /* lowest possible energy value */
+#define LTOT_MIN_EXP -61 /* L_tot=  LTOT_MIN_MAN*2^(LTOT_MIN_EXP-31) */
+#define GRP_SHAPE_INIT 0 /* Q15 */
+
+#define TRANA_TIME 4 /* Transient analysis length in ms  */
+#define LTRANA48K (48000 * TRANA_TIME / 1000)
+#define LTRANA32K (32000 * TRANA_TIME / 1000)
+#define LTRANA24K (24000 * TRANA_TIME / 1000)
+#define LTRANA16K (16000 * TRANA_TIME / 1000)
+#define LTRANA8K (8000 * TRANA_TIME / 1000)
+
+#define MAX_PLOCS ((MAX_LPROT / 4) + 1) /* maximum number of spectral peaks to be searched */
+#define QUOT_LPR_LTR 4
+
+#define BETA_MUTE_FAC_INI 16384 /* Q15, initial noise attenuation factor */
+
+#define OFF_FRAMES_LIMIT 30 /* Hard limit  to a maximum of 300ms of  burst decay frames   */
+
+#define Lprot_hamm_len2_48k (3 * 48)
+#define Lprot_hamm_len2_32k (3 * 32)
+#define Lprot_hamm_len2_24k (3 * 24)
+#define Lprot_hamm_len2_16k (3 * 16)
+#define Lprot_hamm_len2_8k (3 * 8)
+
+#define FRAME_TIME 10 /* Frame length in ms */
+
+#define L_FRAME48K (48000 * FRAME_TIME / 1000)
+#define L_FRAME32K (32000 * FRAME_TIME / 1000)
+#define L_FRAME24K (24000 * FRAME_TIME / 1000)
+#define L_FRAME16K (16000 * FRAME_TIME / 1000)
+#define L_FRAME8K (8000 * FRAME_TIME / 1000)
+
+#ifdef DISABLE_PLC
+#  define MAX_LTRANA 0
+#  define MAX_LPROT LPROT48K
+#  define MAX_L_FRAME L_FRAME48K
+#  define MAX_LPROT_RED LPROT48K_RED
+#else
+
+#  ifdef SUBSET_UB
+#    define MAX_LPROT LPROT48K         /* Max length of protype frame for buffer allocation */
+#    define MAX_LPROT_RED LPROT48K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA48K
+#    define MAX_L_FRAME L_FRAME48K
+#  elif defined(SUBSET_FB)
+#    define MAX_LPROT LPROT48K         /* Max length of protype frame for buffer allocation */
+#    define MAX_LPROT_RED LPROT48K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA48K
+#    define MAX_L_FRAME L_FRAME48K
+#  elif defined(SUBSET_SWB)
+#    define MAX_LPROT LPROT32K
+#    define MAX_LPROT_RED LPROT32K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA32K
+#    define MAX_L_FRAME L_FRAME32K
+#  elif defined(SUBSET_SSWB)
+#    define MAX_LPROT LPROT24K
+#    define MAX_LPROT_RED LPROT24K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA24K
+#    define MAX_L_FRAME L_FRAME24K
+#  elif defined(SUBSET_WB)
+#    define MAX_LPROT LPROT16K
+#    define MAX_LPROT_RED LPROT16K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA16K
+#    define MAX_L_FRAME L_FRAME16K
+#  elif defined(SUBSET_NB)
+#    define MAX_LPROT LPROT8K
+#    define MAX_LPROT_RED LPROT8K_RED /* stack alloc peak searched part */
+#    define MAX_LTRANA LTRANA8K
+#    define MAX_L_FRAME L_FRAME8K
+#  endif
+
+#endif /* #ifdef DISABLE_PLC */
+
+#define INV_L_FRAME48K_Q15 32768 / L_FRAME48K
+#define INV_L_FRAME32K_Q15 32768 / L_FRAME32K
+#define INV_L_FRAME24K_Q15 32768 / L_FRAME24K
+#define INV_L_FRAME16K_Q15 32768 / L_FRAME16K
+#define INV_L_FRAME8K_Q15 32768 / L_FRAME8K
+
+#define MDCT_MEM_LEN_48 (L_FRAME48K - ((180 * L_FRAME48K) / 480))
+
+#define R1_48 690
+#define R2_48 420
+#define R1_16 230
+#define R2_16 140
+#define R1_25 368
+#define R2_25 224
+
+#define MAX_LEN_PCM_PLC_TOT (MAX_LEN_PCM_PLC) /* TDC_pcm_buff   */
+#define MAX_WIN_PRE_TDA (0) /* not in RAM any longer , now stored in ROM only as PhECU_wins[fs_idx][1] */
+
+#define MAX_PLCMETH 1
+
+/* Scratch buffer defines */
+#define scratchBuffer_ACTIVE
+#ifdef ENABLE_HR_MODE
+#  define SCRATCH_BUF_LEN_ENC (4 * MAX_LEN + 32 + 32 + 4 * MAX_LEN + 3 * MAX_LEN + MAX_RESBITS_LEN_32BIT_ALIGN)
+#  define SCRATCH_BUF_LEN_ENC_CURRENT_SCRATCH (4 * MAX_LEN + 8 * 60 + MAX_LEN)
+#else
+#  define SCRATCH_BUF_LEN_ENC (4 * MAX_LEN + 32 + 32 + 2 * MAX_LEN + 3 * MAX_LEN + MAX_RESBITS_LEN_32BIT_ALIGN)
+#  define SCRATCH_BUF_LEN_ENC_CURRENT_SCRATCH (4 * MAX_LEN)
+#endif
+
+#define SCRATCH_BUF_LEN_ENC_TOT (SCRATCH_BUF_LEN_ENC + SCRATCH_BUF_LEN_ENC_CURRENT_SCRATCH)
+
+#ifdef ENABLE_HR_MODE
+#  define SCRATCH_BUF_LEN_DEC (4 * MAX_LEN + MAX_RESBITS_LEN_32BIT_ALIGN + 32 + 32 + 4 * MAX_LEN + 32 + 128 + 128)
+#else
+#  define SCRATCH_BUF_LEN_DEC (4 * MAX_LEN + 2 * MAX_LEN + 32 + 32 + 2 * MAX_LEN + 32 + 128 + 128)
+#endif
+#define SCRATCH_BUF_LEN_DEC_CURRENT_SCRATCH (2 * MAX_LGW + 8 * MAX_LPROT + 12 * MAX_L_FRAME)
+#ifdef ENABLE_HR_MODE
+#  define SCRATCH_BUF_LEN_DEC_TOT (SCRATCH_BUF_LEN_DEC + (4 * HR_MODE_SCRATCH_SIZE) + SCRATCH_BUF_LEN_DEC_CURRENT_SCRATCH)
+#else
+#  define SCRATCH_BUF_LEN_DEC_TOT (SCRATCH_BUF_LEN_DEC + SCRATCH_BUF_LEN_DEC_CURRENT_SCRATCH)
+#endif
+
+#define ADVACED_PLC_SIZE                                                                                               \
+    (sizeof(AplcSetup) + (4 + 2) * MAX_PLOCS + 2 * MAX_LEN_PCM_PLC_TOT + 0 * MAX_LPROT + 2 * MDCT_MEM_LEN_MAX +        \
+     2 * MAX_WIN_PRE_TDA)
+/* ERI : Correct this sum after ROM/RAM , joint RAM optimizations */
+
+
+#define ENC_MAX_SIZE (sizeof(LC3PLUS_Enc) + MAX_CHANNELS * (sizeof(EncSetup) + 6 * MDCT_MEM_LEN_MAX))
+#define DEC_MAX_SIZE                                                                                                   \
+    (sizeof(LC3PLUS_Dec) + MAX_CHANNELS * (sizeof(DecSetup) + ADVACED_PLC_SIZE + 2 * LTPF_MEM_X_LEN + 2 * LTPF_MEM_Y_LEN + \
+                                       2 * MDCT_MEM_LEN_MAX + 2 * MAX_BW))
+
+#if (defined(_M_ARM) || defined(__CC_ARM) || defined(__TMS470__) || defined(__arm__) || defined(__aarch64__)) &&       \
+    (defined(__TARGET_FEATURE_NEON) || defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__ARM_AARCH64_NEON__))
+#  define ALIGNMENT_DEFAULT 16
+#elif defined(__bfin__)
+#  define ALIGNMENT_DEFAULT 4
+#else
+#  define ALIGNMENT_DEFAULT 8
+#endif
+
+/* RAM_ALIGN keyword causes memory alignment of global variables. */
+#if defined(__GNUC__)
+#  define RAM_ALIGN __attribute__((aligned(ALIGNMENT_DEFAULT)))
+#elif defined(__CC_ARM)
+#  define RAM_ALIGN __align(ALIGNMENT_DEFAULT)
+#elif defined(__ANALOG_EXTENSIONS__)
+#  define RAM_ALIGN
+#  pragma pack(ALIGNMENT_DEFAULT)
+#elif defined(_MSC_VER)
+#  define RAM_ALIGN __declspec(align(ALIGNMENT_DEFAULT))
+#else
+#  define RAM_ALIGN
+#endif
+
+#define scratchAlign(ptr, offset) (void *)(((uintptr_t)(ptr) + (offset) + 0x3) & ~0x3)
+
+
+
+/* some configurations leave empty translation units. */
+extern int fix_empty_translation_unit_warning;
+
+#endif /* DEFINES_H */

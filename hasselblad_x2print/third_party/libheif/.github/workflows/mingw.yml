@@ -1,0 +1,36 @@
+name: mingw
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  mingw:
+    strategy:
+      matrix:
+        env:
+          - { MINGW: 32 }
+          - { MINGW: 64 }
+    env: ${{ matrix.env }}
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/install-ci-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Run tests
+      run: |
+        ./scripts/run-ci.sh

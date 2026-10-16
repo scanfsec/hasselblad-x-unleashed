@@ -1,0 +1,184 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#include "functions.h"
+
+static Word32 IIRLattice(Word16 order, const Word16 *parCoeff, Word32 *state, Word32 x);
+
+/*************************************************************************/
+
+void processTnsDecoder_fx(Word16 rc_idx[], Word32 x[], Word16 xLen, Word16 order[], Word16 *x_e, Word16 BW_stopband_idx,
+                          LC3PLUS_FrameDuration frame_dms, lc3_scratch_t scratch
+#ifdef ENABLE_HR_MODE
+                          , Word16 hrmode
+#endif
+#  ifdef CR14_A_ADD_LOSSLESS_MODE
+                          , Word16 ll_adap_flag
+#  endif
+)
+{
+    Dyn_Mem_Deluxe_In(
+        Word32 *state;
+        Counter i, j;
+        Word16  s1, s2, s, *rc, f, stopfreq, BW_stopband;
+        Word16  numfilters, startfreq[TNS_NUMFILTERS_MAX];
+    );
+
+    state = (Word32*) lc3_scratch_push( scratch, sizeof( *state ) * MAXLAG );
+    rc = (Word16*) lc3_scratch_push( scratch, sizeof( *rc ) * MAXLAG );
+
+    numfilters  = 1;
+    
+#ifdef ENABLE_HR_MODE
+    if (hrmode == 1)
+    {
+        BW_stopband = BW_cutoff_bin_all_HR[BW_stopband_idx];        move16();
+    }
+    else
+#endif
+    {
+        BW_stopband = BW_cutoff_bin_all[BW_stopband_idx]; move16();
+    }
+
+    SWITCH (frame_dms)
+    {
+#ifdef CR9_C_ADD_1p25MS
+    case LC3PLUS_FRAME_DURATION_1p25MS:
+        startfreq[0] = 3; move16();
+        BW_stopband  = shr_pos(BW_stopband, 3);
+        BREAK;
+#endif
+    case LC3PLUS_FRAME_DURATION_2p5MS:
+        startfreq[0] = 3; move16();
+        BW_stopband  = shr_pos(BW_stopband, 2);
+        BREAK;
+    case LC3PLUS_FRAME_DURATION_5MS:
+        startfreq[0] = 6; move16();
+        BW_stopband  = shr_pos(BW_stopband, 1);
+        BREAK;
+    case LC3PLUS_FRAME_DURATION_7p5MS:
+        startfreq[0] = 9; move16();
+        BW_stopband = add(shr_pos(BW_stopband, 2), add(shr_pos(BW_stopband, 2), shr_pos(BW_stopband, 2)));
+        BREAK;
+    case LC3PLUS_FRAME_DURATION_10MS: startfreq[0] = 12; BREAK;
+    case LC3PLUS_FRAME_DURATION_UNDEFINED: assert(0);
+    }
+
+    IF (sub(BW_stopband_idx, 3) >= 0 && frame_dms >= LC3PLUS_FRAME_DURATION_5MS)
+    {
+        numfilters   = 2;
+        startfreq[1] = shr_pos(BW_stopband, 1);
+    }
+    
+#ifdef CR9_C_ADD_1p25MS
+    IF (frame_dms <= LC3PLUS_FRAME_DURATION_1p25MS) {
+        numfilters = 0;
+    }
+#endif
+    
+    stopfreq = 0;
+
+    test(); test();
+    IF (order[0] > 0 || (sub(numfilters, 2) == 0 && order[1] > 0))
+    {
+        /* Scaling */
+        f = startfreq[0]; move16();
+        test();
+        IF (sub(numfilters, 2) == 0 && order[0] == 0)
+        {
+            f = startfreq[1]; move16();
+        }
+        
+#ifdef CR14_A_ADD_LOSSLESS_MODE
+        if ( ll_adap_flag == 0 )
+        {
+            s1 = getScaleFactor32( x, f );
+            s2 = getScaleFactor32( x + f, sub( xLen, f ) );
+            s = s_min( s1, sub( s2, 7 ) ); /* 7 bits of headroom for IIR filtering */
+            *x_e = sub( *x_e, s );
+        }
+        else
+        {
+            s = 0;
+        }
+#else
+        s1   = getScaleFactor32(x, f);
+        s2   = getScaleFactor32(x + f, sub(xLen, f));
+        s    = s_min(s1, sub(s2, 7)); /* 7 bits of headroom for IIR filtering */
+        *x_e = sub(*x_e, s);
+#endif
+
+/* Init Filter */
+        basop_memset(state, 0, MAXLAG * sizeof(Word32));
+        FOR (i = 0; i < f; i++)
+        {
+            x[i] = L_shl(x[i], s); move32();
+        }
+
+        FOR (j = 0; j < numfilters; j++)
+        {
+            IF (order[j] > 0)
+            {
+                /* Unquantize coefficients */
+                FOR (i = 0; i < order[j]; i++)
+                {
+                    rc[i] = tnsQuantPts[rc_idx[j * MAXLAG + i]]; move16();
+                }
+
+                /* Stop frequency */
+                stopfreq = BW_stopband; move16();
+                IF (sub(numfilters, 2) == 0 && j == 0)
+                {
+                    stopfreq = startfreq[1];
+                }
+
+                /* Filter */
+                FOR (i = startfreq[j]; i < stopfreq; i++)
+                {
+                    x[i] = IIRLattice(order[j], rc, state, L_shl(x[i], s)); move32();
+                }
+            }
+        }
+        FOR (i = stopfreq; i < xLen; i++)
+        {
+            x[i] = L_shl(x[i], s); move32();
+        }
+    }
+    
+    rc = (Word16*) lc3_scratch_pop( scratch, rc );
+    state = (Word32*) lc3_scratch_pop( scratch, state );
+    
+    Dyn_Mem_Deluxe_Out();
+}
+
+/*************************************************************************/
+/*************************************************************************/
+/*************************************************************************/
+
+static Word32 IIRLattice(Word16 order, const Word16 *parCoeff, Word32 *state, Word32 x)
+{
+    Dyn_Mem_Deluxe_In(
+        Counter i;
+    );
+
+    /* first stage: no need to calculate state[order-1] */
+    x = L_sub_sat(x, Mpy_32_16(state[order - 1], parCoeff[order - 1]));
+
+    FOR (i = order - 2; i >= 0; i--)
+    {
+        x            = L_sub(x, Mpy_32_16(state[i], parCoeff[i]));
+        state[i + 1] = L_add(state[i], Mpy_32_16(x, parCoeff[i])); move32();
+    }
+
+    state[0] = x; move32();
+
+    Dyn_Mem_Deluxe_Out();
+    return x;
+}
+

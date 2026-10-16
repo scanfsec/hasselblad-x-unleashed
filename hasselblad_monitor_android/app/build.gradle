@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+android {
+    namespace 'com.x2dii.uvcmonitor'
+    compileSdk 37
+
+    defaultConfig {
+        applicationId 'com.x2dii.uvcmonitor'
+        minSdk 29
+        // UVC 库(2020年代码)的 register() 用 flags=0 的 PendingIntent + 两参 registerReceiver：
+        // 前者 Android12+ 强制可变标志、后者 Android14+ 强制导出标志，均按 targetSdk 门槛执行。
+        // 降到 30 同时绕开两条(侧载不受限)，USB host 行为与 targetSdk 无关。
+        targetSdk 30
+        versionCode 8
+        versionName '2.7'
+        testInstrumentationRunner 'com.x2dii.uvcmonitor.LifecycleInstrumentation'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildFeatures {
+        compose true
+    }
+    packaging {
+        jniLibs {
+            // Local libuvc fixes SS isochronous budgets; verify the APK hash after packaging.
+            pickFirsts += ['lib/arm64-v8a/libuvc.so', 'lib/arm64-v8a/libusb100.so', 'lib/arm64-v8a/libUVCCamera.so']
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    // UVC 引擎（libusb + libuvc，NV21 帧回调）。
+    // 传递依赖 com.serenegiant:common 无处可寻（已 exclude），所需两个工具类
+    // 已按同包名补在 app/src/main/java/com/serenegiant/utils/ 下。
+    implementation('com.github.jiangdongguo:AndroidUSBCamera:2.2.8') {
+        exclude group: 'com.serenegiant', module: 'common'
+        exclude group: 'com.android.support'
+    }
+
+    implementation platform('androidx.compose:compose-bom:2026.09.00')
+    implementation 'androidx.activity:activity-compose:1.13.0'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.foundation:foundation'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+}

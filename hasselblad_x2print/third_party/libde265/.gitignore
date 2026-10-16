@@ -1,0 +1,31 @@
+*~
+*.o
+*.obj
+*.DS_Store
+
+# cmake
+/build
+/_build
+
+# MSVC
+*.sln
+*.ncb
+*.suo
+*.vcproj*
+
+# ctags
+tags
+
+# build outputs
+acceleration-speed/acceleration_speed
+dec265/dec265
+dec265/hdrcopy
+enc265/enc265
+libde265/de265-version.h
+sherlock265/sherlock265
+tools/bjoentegaard
+tools/block-rate-estim
+tools/gen-enc-table
+tools/rd-curves
+tools/tests
+tools/yuv-distortion

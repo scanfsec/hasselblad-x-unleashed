@@ -1,0 +1,32 @@
+name: emscripten
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  emscripten:
+    env:
+      EMSCRIPTEN_VERSION: 3.1.61
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install emscripten
+      run: |
+        ./scripts/install-ci-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/prepare-ci.sh
+
+    - name: Run tests
+      run: |
+        ./scripts/run-ci.sh

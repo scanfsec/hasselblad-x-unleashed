@@ -1,0 +1,434 @@
+/******************************************************************************
+*                        ETSI TS 103 634 V1.7.1                               *
+*              Low Complexity Communication Codec Plus (LC3plus)              *
+*                                                                             *
+* Copyright licence is solely granted through ETSI Intellectual Property      *
+* Rights Policy, 3rd April 2019. No patent licence is granted by implication, *
+* estoppel or otherwise.                                                      *
+******************************************************************************/
+
+#include "functions.h"
+
+#ifdef CR9_C_ADD_1p25MS_LRSNS
+#include "constants.h"
+#endif
+
+/*************************************************************************/
+
+
+void process_ltpf_coder_fx(Word16 *bits, Word16 ol_pitch, Word16 ltpf_enable, Word16 *mem_in_exp, Word16 mem_in[],
+                           Word16 mem_in_len, Word16 param[], Word16 *xin, Word16 len, Word16 *mem_normcorr,
+                           Word16 *mem_mem_normcorr, Word16 ol_normcorr, Word16 *mem_ltpf_on, Word16 *mem_ltpf_pitch,
+                           Word16 xin_exp, LC3PLUS_FrameDuration frame_dms, lc3_scratch_t scratch
+                          , Word16 hrmode
+#ifdef CR9_C_ADD_1p25MS
+#ifdef NEW_SIGNALLING_SCHEME_1p25
+                            , Word16* Tx_ltpf
+#else
+                            , Word16  Tx_ltpf
+#endif
+#endif
+)
+{
+    Word16  pitch_index, scale0, scale1, scale2, *x, x_exp, shift, prod_exp, ltpf_pitch;
+    Word32  L_tmp, cor_max32, sum0, sum1, sum2, prod, inv;
+    Word32 *ac32;
+    Word16 *ac, *currFrame, *predFrame;
+    Word16  min_pitch, max_pitch, ac_min_pitch, ac_max_pitch, ac_max;
+    Word16  pitch, pitch_res, min_pitch_fr, pitch_int, pitch_fr, norm_corr, ltpf_active;
+    Counter n, m, fr;
+    Word16  tmp, acflen;
+#if defined (CR9_C_ADD_1p25MS)
+    Word16 activation_due_to_past_corr, activation_due_to_stable_pitch, activation;
+#endif
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_In("process_ltpf_coder_fx", sizeof(struct {
+        Word16  pitch_index, scale0, scale1, scale2, *x, x_exp, shift, prod_exp, ltpf_pitch;
+        Word32  L_tmp, cor_max32, sum0, sum1, sum2, prod, inv;
+        Word32 *ac32;
+        Word16 *ac, *currFrame, *predFrame;
+        Word16  min_pitch, max_pitch, ac_min_pitch, ac_max_pitch, ac_max;
+        Word16  pitch, pitch_res, min_pitch_fr, pitch_int, pitch_fr, norm_corr, ltpf_active;
+        Counter n, m, fr;
+        Word16  tmp, acflen;
+     }));
+#endif
+
+    UNUSED(mem_mem_normcorr);
+
+    ltpf_active = 0; move16();
+    norm_corr   = 0; move16();
+
+    /* Input buffer */
+    x = mem_in + mem_in_len;
+
+    basop_memmove(x, xin, (len + 1) * sizeof(Word16));
+
+    ASSERT(mem_in_len + len + 1 <= LTPF_MEMIN_LEN + LEN_12K8 + 1);
+
+    /* Scaling */
+    scale0      = sub(getScaleFactor16_0(mem_in, mem_in_len), 3);
+    *mem_in_exp = sub(*mem_in_exp, scale0); move16();
+    scale1      = sub(getScaleFactor16_0(x, len + 1), 3);
+    x_exp       = sub(xin_exp, scale1);
+    scale2      = sub(*mem_in_exp, x_exp);
+    IF (scale2 > 0)
+    {
+        Scale_sig(x, len + 1, sub(scale1, scale2));
+        Scale_sig(mem_in, mem_in_len, scale0);
+        x_exp = *mem_in_exp; move16();
+    }
+    ELSE
+    {
+        Scale_sig(x, len + 1, scale1);
+        Scale_sig(mem_in, mem_in_len, add(scale0, scale2));
+        *mem_in_exp = x_exp; move16();
+    }
+
+    Word32 normCorrTh = 0;
+    if (hrmode) {
+        normCorrTh = 13107;
+    } else {
+        normCorrTh = 19660;
+    }
+
+    IF (sub(ol_normcorr, normCorrTh) > 0)
+    {
+        ac32 = (Word32*) lc3_scratch_push( scratch, sizeof( *ac32 ) * 17 );
+        ac = (Word16*) lc3_scratch_push( scratch, sizeof( *ac ) * 17 );
+        
+        /* Autocorrelation Bounds */
+        min_pitch    = sub(ol_pitch, 4);
+        max_pitch    = add(ol_pitch, 4);
+        min_pitch    = s_max(min_pitch, MIN_PITCH_12K8);
+        max_pitch    = s_min(max_pitch, MAX_PITCH_12K8);
+        ac_min_pitch = sub(min_pitch, 4);
+        ac_max_pitch = add(max_pitch, 4);
+        acflen       = len; move16();
+
+#ifndef FIX_LTPF_PITCH_MEM_LEN
+        IF ( sub( frame_dms, LC3PLUS_FRAME_DURATION_2p5MS ) == 0 )
+        {
+            acflen = shl( len, 1 );
+            x = x - len;
+        }
+
+#ifdef CR9_C_ADD_1p25MS
+        IF ( sub( frame_dms, LC3PLUS_FRAME_DURATION_1p25MS ) == 0 )
+        {
+            acflen = shl( len, 2 );
+            x = x - 80;
+        }
+#endif
+#else
+        if (sub(frame_dms, LC3PLUS_FRAME_DURATION_5MS) == 0)
+        {
+            acflen = shl(len, 1);
+        }
+        if (sub(frame_dms, LC3PLUS_FRAME_DURATION_2p5MS) == 0)
+        {
+            acflen = shl(len, 2);
+        }
+#ifdef CR9_C_ADD_1p25MS
+        if (sub(frame_dms, LC3PLUS_FRAME_DURATION_1p25MS) == 0)
+        {
+            acflen = shl(len, 3);
+        }
+#endif
+        x = x - (mem_in_len - LTPF_MEMIN_LEN);
+#endif
+        /* Compute norm */
+        sum1 = L_mac0(1, x[0], x[0]);
+        sum2 = L_mac0(1, x[-ac_min_pitch], x[-ac_min_pitch]);
+        FOR (m = 1; m < acflen; m++)
+        {
+            sum1 = L_mac0(sum1, x[m], x[m]);
+            sum2 = L_mac0(sum2, x[m - ac_min_pitch], x[m - ac_min_pitch]);
+        }
+        scale1   = norm_l(sum1);
+        sum1     = L_shl_pos(sum1, scale1);
+
+        /* Compute Autocorrelation */
+        FOR (n = ac_min_pitch; n <= ac_max_pitch; n++)
+        {
+            sum0 = L_mac0(0L, x[0], x[0 - n]);
+            FOR (m = 1; m < acflen; m++)
+            {
+                sum0 = L_mac0(sum0, x[m], x[m - n]);
+            }
+            if (n > ac_min_pitch)
+            {
+              sum2 = L_msu0(sum2, x[acflen - 1 - (n - 1)], x[acflen - 1 - (n - 1)]);
+              sum2 = L_mac0_sat(sum2, x[-n], x[-n]);
+            }
+            scale2   = norm_l(sum2);
+            L_tmp    = L_shl_pos(sum2, scale2);
+            prod     = Mpy_32_32(sum1, L_tmp);
+            shift    = norm_l(prod);
+            prod     = L_shl_pos(prod, shift);
+            prod_exp = sub(62, add(add(scale1, scale2), shift));
+            inv      = Isqrt(prod, &prod_exp);
+            scale0   = norm_l(sum0);
+            sum0     = L_shl_pos(sum0, scale0);
+            prod     = Mpy_32_32(sum0, inv);
+            prod_exp = add(sub(31, scale0), prod_exp);
+            test();
+            IF (prod == 0 || sub(norm_l(prod), prod_exp) >= 0)
+            {
+                ac[n - ac_min_pitch] = s_max(0, round_fx_sat(L_shl_sat(prod, prod_exp))); move16();
+            }
+            ELSE
+            {
+                ac[n - ac_min_pitch] = 32767; move16();
+            }
+        }
+
+        /* Find maximum */
+        ac_max = ac[min_pitch - ac_min_pitch]; move16();
+        pitch  = min_pitch;                    move16();
+
+        FOR (n = min_pitch + 1; n <= max_pitch; n++)
+        {
+            tmp = sub_sat(ac[n - ac_min_pitch], ac_max);
+
+            if (tmp > 0)
+            {
+                pitch = n; move16();
+            }
+            ac_max = s_max(ac_max, ac[n - ac_min_pitch]);
+        }
+        pitch_int   = pitch; move16();
+        pitch_fr    = 0;     move16();
+        pitch_index = add(pitch_int, 283);
+
+        /* If the pitch is low -> estimate a fractional part */
+        IF (sub(pitch, RES2_PITCH_12K8) < 0)
+        {
+            IF (sub(pitch, RES4_PITCH_12K8) < 0)
+            {
+                pitch_res    = 1;  move16();
+                min_pitch_fr = -3; move16();
+            }
+            ELSE
+            {
+                pitch_res    = 2;  move16();
+                min_pitch_fr = -2; move16();
+            }
+            if (sub(pitch, min_pitch) == 0)
+            {
+                min_pitch_fr = 0;
+            }
+            cor_max32 = MIN_32;
+            FOR (fr = min_pitch_fr; fr < 4; fr += pitch_res)
+            {
+                sum0 = L_mult0(ac[pitch_int - ac_min_pitch - 4], ltpf_ac_interp_filt[fr + 3][0]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch - 3], ltpf_ac_interp_filt[fr + 3][1]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch - 2], ltpf_ac_interp_filt[fr + 3][2]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch - 1], ltpf_ac_interp_filt[fr + 3][3]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch + 0], ltpf_ac_interp_filt[fr + 3][4]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch + 1], ltpf_ac_interp_filt[fr + 3][5]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch + 2], ltpf_ac_interp_filt[fr + 3][6]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch + 3], ltpf_ac_interp_filt[fr + 3][7]);
+                sum0 = L_mac0(sum0, ac[pitch_int - ac_min_pitch + 4], ltpf_ac_interp_filt[fr + 3][8]);
+
+                L_tmp = L_sub_sat(sum0, cor_max32);
+                if (L_tmp > 0)
+                {
+                    pitch_fr = fr; move16();
+                }
+                cor_max32 = L_max(cor_max32, sum0);
+            }
+            IF (pitch_fr < 0)
+            {
+                pitch_int = sub(pitch_int, 1);
+                pitch_fr  = add(pitch_fr, 4);
+            }
+            IF (sub(pitch_int, 127) >= 0)
+            {
+                pitch_index = add(add(shl_pos(pitch_int, 1), shr_pos(pitch_fr, 1)), 126);
+            }
+            ELSE
+            {
+                pitch_index = sub(add(shl_pos(pitch_int, 2), pitch_fr), 128);
+            }
+        }
+        ltpf_pitch = add(shl_pos(pitch_int, 2), pitch_fr);
+
+        /* Filter current and predicted frame */
+        
+        ac = (Word16*) lc3_scratch_pop( scratch, ac );
+        ac32 = (Word32*) lc3_scratch_pop( scratch, ac32 );
+
+        currFrame = (Word16*) lc3_scratch_push( scratch, sizeof( *currFrame ) * LEN_12K8 );
+        predFrame = (Word16*) lc3_scratch_push( scratch, sizeof( *predFrame ) * LEN_12K8 );
+
+        FOR (n = 0; n < acflen; n++)
+        {
+            sum0         = L_mult(x[n + 1], inter_filter[0][0][0]);
+            sum0         = L_mac(sum0, x[n], inter_filter[0][0][1]);
+            currFrame[n] = mac_r(sum0, x[n - 1], inter_filter[0][0][2]);
+
+            sum0         = L_mult(x[n - pitch_int + 1], inter_filter[0][pitch_fr][0]);
+            sum0         = L_mac(sum0, x[n - pitch_int], inter_filter[0][pitch_fr][1]);
+            sum0         = L_mac(sum0, x[n - pitch_int - 1], inter_filter[0][pitch_fr][2]);
+            predFrame[n] = mac_r(sum0, x[n - pitch_int - 2], inter_filter[0][pitch_fr][3]);
+        }
+
+        /* Normalized Correlation */
+        sum0 = L_mult0(currFrame[0], predFrame[0]);
+        sum1 = L_mac0(1, predFrame[0], predFrame[0]);
+        sum2 = L_mac0(1, currFrame[0], currFrame[0]);
+        for (m = 1; m < acflen; m++)
+        {
+            sum0 = L_mac0(sum0, currFrame[m], predFrame[m]);
+            sum1 = L_mac0(sum1, predFrame[m], predFrame[m]);
+            sum2 = L_mac0(sum2, currFrame[m], currFrame[m]);
+        }
+        
+        predFrame = (Word16*) lc3_scratch_pop( scratch, predFrame );
+        currFrame = (Word16*) lc3_scratch_pop( scratch, currFrame );
+
+        scale1   = norm_l(sum1);
+        scale2   = norm_l(sum2);
+        sum1     = L_shl_pos(sum1, scale1);
+        sum2     = L_shl_pos(sum2, scale2);
+        prod     = Mpy_32_32(sum1, sum2);
+        shift    = norm_l(prod);
+        prod     = L_shl_pos(prod, shift);
+        prod_exp = sub(62, add(add(scale1, scale2), shift));
+        inv      = Isqrt(prod, &prod_exp);
+        scale0   = norm_l(sum0);
+        sum0     = L_shl_pos(sum0, scale0);
+        prod     = Mpy_32_32(sum0, inv);
+        prod_exp = add(sub(31, scale0), prod_exp);
+        test();
+        IF (prod == 0 || sub(norm_l(prod), prod_exp) >= 0)
+        {
+            norm_corr = s_max(0, round_fx_sat(L_shl_sat(prod, prod_exp))); move16();
+        }
+        ELSE
+        {
+            norm_corr = 32767; move16();
+        }
+        if (norm_corr < 0)
+        {
+            norm_corr = 0;
+        }
+
+        IF (sub(ltpf_enable, 1) == 0)
+        {
+            test(); test(); test(); test();
+            /* Decision if lptf active */
+#if defined (CR9_C_ADD_1p25MS)
+            activation_due_to_past_corr = sub(mem_normcorr[1], 30802) > 0;
+            activation_due_to_stable_pitch = 1;
+            IF (frame_dms == LC3PLUS_FRAME_DURATION_1p25MS)
+            {
+                activation_due_to_past_corr &= sub(mem_normcorr[2], 30802) > 0;
+                activation_due_to_past_corr &= sub(mem_normcorr[3], 30802) > 0;
+                activation_due_to_past_corr &= sub(mem_normcorr[4], 30802) > 0;
+
+                /* 0.7 * max(pitch,mem.pitch(1)) < min(pitch,mem.pitch(1)); */
+                Word16 tmp_max = s_max(ltpf_pitch, *mem_ltpf_pitch);
+                Word16 tmp_min = s_min(ltpf_pitch, *mem_ltpf_pitch);
+                activation_due_to_stable_pitch = shr(mult(shl(tmp_max,5),22938),5) < tmp_min;
+            }
+            activation = activation_due_to_past_corr && activation_due_to_stable_pitch;
+
+            IF( ( *mem_ltpf_on == 0 && sub( *mem_normcorr, 30802 ) > 0 && sub( norm_corr, 30802 ) > 0 &&
+                  ( sub( frame_dms, LC3PLUS_FRAME_DURATION_10MS ) == 0 || activation ) ) ||
+                ( sub( *mem_ltpf_on, 1 ) == 0 && sub( norm_corr, 29491 ) > 0 ) & activation_due_to_stable_pitch ||
+                ( sub( *mem_ltpf_on, 1 ) == 0 && sub( abs_s( sub( ltpf_pitch, *mem_ltpf_pitch ) ), 8 ) < 0 &&
+                  add( sub( norm_corr, *mem_normcorr ), 3277 ) > 0 && sub( norm_corr, 27525 ) > 0 ) )
+#  else
+            IF( ( *mem_ltpf_on == 0 && sub( mem_normcorr[0], 30802 ) > 0 && sub( norm_corr, 30802 ) > 0 &&
+                  ( sub( frame_dms, LC3PLUS_FRAME_DURATION_10MS ) == 0 || sub( mem_normcorr[1], 30802 ) > 0 ) ) ||
+                ( sub( *mem_ltpf_on, 1 ) == 0 && sub( norm_corr, 29491 ) > 0 ) ||
+                ( sub( *mem_ltpf_on, 1 ) == 0 && sub( abs_s( sub( ltpf_pitch, *mem_ltpf_pitch ) ), 8 ) < 0 &&
+                  add( sub( norm_corr, mem_normcorr[0] ), 3277 ) > 0 && sub( norm_corr, 27525 ) > 0 ) )
+#  endif
+            {
+                ltpf_active = 1; move16();
+            }
+        }
+
+        param[0] = 1;           move16();
+        param[1] = ltpf_active; move16();
+        param[2] = pitch_index; move16();
+        *bits    = 11;          move16();
+    }
+    ELSE
+    {
+        norm_corr  = ol_normcorr; move16();
+        param[0]   = 0;           move16();
+        param[1]   = 0;           move16();
+        param[2]   = 0;           move16();
+        *bits      = 1;           move16();
+        ltpf_pitch = 0;           move16();
+    }
+
+#ifdef CR9_C_ADD_1p25MS
+    if ( sub(frame_dms, LC3PLUS_FRAME_DURATION_1p25MS) == 0 )
+    {
+#  ifdef NEW_SIGNALLING_SCHEME_1p25
+        tmp = s_min(*Tx_ltpf, 1);  /* tmp == 0 == phaseA, tmp==1==PhaseB ) */
+        test(); test(); test();
+        if (param[0] == 0 && tmp != 0)
+        {
+            /* pitch correlation dropped from high(ltpf_active) to low(no ltp info at all ),
+              we select to NOT send the remaining phaseB laginfo  for use in a  possible  low corr  PLC frame */
+            *Tx_ltpf = 0;  move16();   /* kill the lag transmission state at  encoder side */
+        }
+
+        /* 00        (ltp=0, ltpf=0, no Phase, 2b),
+           010yyyy   (ltp=1, ltpf=0, phaseA,   7b),
+           011zzzz   (ltp=1, ltpf=0, phaseB ,  7b), "zzzz=lowered lag res for PLC use"
+           10yyyy    (ltp=1, ltpf=1) phaseA    6b)
+           11ZZZZZ   (ltp=1, ltpf=1) phaseB    7b)  "ZZZZZ= full lag resolution for LTPF use"
+        */
+        test();
+        IF(param[0] != 0)
+        {
+            test();
+            IF(param[1] == 0)
+            {   /* ltpf inactive  */
+                tmp = s_or(shl(param[0], 1), tmp);  /* LTP in b1 phase in LSB b0 , tmp becomes  2 or 3 */
+                ASSERT(tmp==2 || tmp == 3 );
+            }
+            ELSE
+            { /* ltpf  active  */
+                ASSERT(param[2] >= 0 && param[2] <= 511);
+                tmp = s_or(0x04, shl(tmp, 1));       /* LTPF in b2, phase b1,   always zero in b0 , tmp becomes  4 or 6 */
+                ASSERT(tmp == 4 || tmp == 6);
+            }
+        }
+        *bits = lrsns_ltp_bits_fx[tmp];  move16(); /*         one of { 2,2,  7,7 , 6,6, 7,7} */
+                                                   /* tmp as idx  is   0,1   2,3   4,5, 6,7  */
+        ASSERT(*bits >= 2 && *bits <= 7);
+#else
+        ASSERT(*bits == 1 || *bits == 11 );
+#endif
+    }
+#else
+        ASSERT(*bits == 1 || *bits == 11 );
+#endif /* CR9_C_ADD_1p25MS */
+
+/* Update memory */
+    FOR (n = 0; n < mem_in_len; n++)
+    {
+        mem_in[n] = mem_in[n + len]; move16();
+    }
+
+    FOR (n = LEN_MEM_NORMCORR-2; n>=0; n--) {
+        mem_normcorr[n+1] = mem_normcorr[n]; move16();
+    }
+
+    *mem_normcorr   = norm_corr;   move16();
+    *mem_ltpf_on    = ltpf_active; move16();
+    *mem_ltpf_pitch = ltpf_pitch;  move16();
+
+#ifdef DYNMEM_COUNT
+    Dyn_Mem_Out();
+#endif
+}

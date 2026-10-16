@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- UVC：视频类 14（设备级或接口级声明都匹配） -->
+    <usb-device class="14"/>
+    <usb-device class="239" subclass="2"/>
+</resources>

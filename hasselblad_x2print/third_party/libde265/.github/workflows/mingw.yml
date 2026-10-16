@@ -1,0 +1,39 @@
+name: mingw
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        env:
+          - { TARGET_HOST: "i686-w64-mingw32", WINE: "wine" }
+          - { TARGET_HOST: "x86_64-w64-mingw32", WINE: "wine64" }
+    env: ${{ matrix.env }}
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Checkout sample streams
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      with:
+        repository: strukturag/libde265-data
+        path: libde265-data
+        persist-credentials: false
+
+    - name: Install dependencies
+      run: |
+        ./scripts/ci-before-install-linux.sh
+
+    - name: Prepare CI
+      run: |
+        ./scripts/ci-before-script.sh
+
+    - name: Run tests
+      run: |
+        ./scripts/ci-run.sh

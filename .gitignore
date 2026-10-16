@@ -1,2 +1,11 @@
 # local preview / scratch
 _preview.html
+
+# build artifacts
+__pycache__/
+*.pyc
+*.o
+*.ko
+
+# android local config
+local.properties
