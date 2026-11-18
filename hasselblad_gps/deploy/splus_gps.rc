@@ -1,0 +1,10 @@
+service splus_gps /system/bin/zzsh /system/bin/splus_gps_boot.sh
+    seclabel u:r:hbl_camera_service:s0
+    class late_start
+    user root
+    group root
+    disabled
+    oneshot
+
+on post-fs-data
+    start splus_gps

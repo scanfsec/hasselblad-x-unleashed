@@ -1,0 +1,20 @@
+# s_hgpsd.rc - gpsd 开机常驻注册(zz_boot 标准配方模式 A, s_x2dprint 同构)
+# 服务名/开关: persist.zz.hgpsd(=1 启用, =0 软禁用——重启后相机 100% 原厂行为)
+# 部署: /system/etc/init/s_hgpsd.rc(644, system_file 标签)——随 service.sh install 落位
+# 还原: rm /system/etc/init/s_hgpsd.rc /system/bin/s_hgpsd_boot.sh(OTA 前执行)
+# 依赖: /system/bin/zzsh(zz_boot 配方一次性安装的共用入口, x2print/x2nes 已装则复用)
+
+service s_hgpsd /system/bin/zzsh /system/bin/s_hgpsd_boot.sh
+    seclabel u:r:hbl_camera_service:s0
+    class core
+    oneshot
+
+on early-init
+    start s_hgpsd
+
+on property:persist.zz.hgpsd=1
+    start s_hgpsd
+
+# 注意: boot 时 property 触发器不重估, 自启靠 early-init + class core 兜底;
+# persist.zz.hgpsd 只是 wrapper 内的门控(zz_boot README §1.6)。
+# 本服务不停/不抢 GUI、不做任何电源操作; Wi-Fi/电源面零接触。
