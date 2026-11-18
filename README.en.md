@@ -21,6 +21,7 @@ This project explores the potential of Hasselblad X System camera firmware (X1D 
 | In-camera NES games / DOOM | Runs an NES emulator and the classic game DOOM on the camera's display, with support for playing via a bridged PS5 (DualSense) controller | ✅ Done |
 | In-camera wireless microphone | Supports a pair of DJI MIC wireless microphones for stereo audio input: internal recording at 48 kHz / 24 bit, 48 kHz / 16 bit over the camera's Wi-Fi link | ✅ Done |
 | External monitor (UVC) | The camera outputs its live view over USB as a standard UVC device, plug-and-play on any computer; companion Android / iOS apps add zebra, false color, focus peaking, histogram, aspect masks and other monitoring tools | ✅ Done |
+| GPS geotagging | Ports the X1D II GPS lifecycle to the X2D II: works with the factory X1D GPS module or a DIY Bluetooth module built from an HGLRC M100 MINI, and writes location data into new 3FR / JPG / HEIC photos automatically | ✅ Done |
 | Video recording | Unlocks the camera body's video recording capability, with MP4 now produced directly in-camera | 🚧 In progress |
 
 > More features are being explored — feedback and discussion are welcome.
@@ -36,6 +37,7 @@ This project explores the potential of Hasselblad X System camera firmware (X1D 
 
 | Directory | Contents |
 | --- | --- |
+| `hasselblad_gps/` | GPS geotagging: DIY Bluetooth GPS module firmware (ESP32-S3 + HGLRC M100 MINI), in-camera location service with source selection (Bluetooth / factory hotshoe module), D-Bus contract, and 3FR / JPG / HEIC location injection |
 | `hasselblad_mic/` | Wireless microphone: scanning / pairing, connection management and settings, LC3plus decoding, PCM FIFO, WAV recording, plus audio-lease interfaces for video recording |
 | `hasselblad_monitor/` | External monitor (camera side): UVC gadget frame feeder and kernel-runtime guard modules |
 | `hasselblad_monitor_android/` | External monitor (Android viewer): UVC capture + GL rendering with the full monitoring toolset |
@@ -94,6 +96,14 @@ Connects directly to wireless mics such as the DJI MIC, with live battery, signa
 
 ![Mic management](assets/screenshots/mic_1.jpg)
 ![Mic settings](assets/screenshots/mic_2.jpg)
+
+### GPS geotagging
+
+Works with the factory X1D GPS module or a DIY Bluetooth module built from an HGLRC M100 MINI: once a fix is acquired, the live view shows a GPS indicator and new photos (3FR / JPG / HEIC) get their location written automatically — visible on the map in any photo app.
+
+![Live view GPS indicator](assets/screenshots/gps1.jpg)
+![Fix status and auto-write switch](assets/screenshots/gps2.jpg)
+![Photo location in the Photos app](assets/screenshots/gps3.jpg)
 
 ### Direct wireless printing
 

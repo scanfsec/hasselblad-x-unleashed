@@ -22,6 +22,7 @@
 | 机内 NES 游戏 / DOOM | 在相机屏幕上运行 NES 模拟器与经典游戏 DOOM，并支持通过桥接连接 PS5（DualSense）手柄进行游玩 | ✅ 已完成 |
 | 机内无线麦克风 | 支持双 DJI MIC 无线麦克风立体声音频输入：内录 48 kHz / 24 bit，相机 Wi-Fi 48 kHz / 16 bit | ✅ 已完成 |
 | 外接监视器（UVC） | 相机通过 USB 以标准 UVC 设备输出实时取景画面，电脑即插即用；配套安卓 / iOS 监看 App，内置斑马纹、假彩色、峰值对焦、直方图、画幅遮罩等专业监看工具 | ✅ 已完成 |
+| GPS 地理标记 | 移植 X1D II 的 GPS 生命周期：支持原厂 X1D GPS 模块，或使用化骨龙 HGLRC M100 MINI 自制蓝牙 GPS 模块；定位后自动为 3FR / JPG / HEIC 照片写入位置信息 | ✅ 已完成 |
 | 视频录制 | 解锁机身视频录制能力，机身内直接产出 MP4 | 🚧 开发中 |
 
 > 更多功能持续探索中，欢迎交流。
@@ -37,6 +38,7 @@
 
 | 目录 | 内容 |
 | --- | --- |
+| `hasselblad_gps/` | GPS 地理标记：DIY 蓝牙 GPS 模块固件（ESP32-S3 + 化骨龙 HGLRC M100 MINI）、机内定位服务与来源选择（蓝牙 / 热靴原厂模块）、D-Bus 契约，以及 3FR / JPG / HEIC 三格式位置写入 |
 | `hasselblad_mic/` | 无线麦克风：扫描 / 配对、连接管理与状态设置、LC3plus 解码、PCM FIFO、WAV 录音，以及供视频录制使用的音频租约接口 |
 | `hasselblad_monitor/` | 外接监视器（相机侧）：UVC gadget 喂帧器与内核运行时防护模块 |
 | `hasselblad_monitor_android/` | 外接监视器（安卓监看端）：UVC 取流 + GL 渲染，内置全套监看工具 |
@@ -95,6 +97,14 @@
 
 ![麦克风管理](assets/screenshots/mic_1.jpg)
 ![麦克风设置](assets/screenshots/mic_2.jpg)
+
+### GPS 地理标记
+
+支持原厂 X1D GPS 模块，或使用化骨龙 HGLRC M100 MINI 自制蓝牙 GPS 模块：定位成功后取景界面亮起 GPS 图标，新拍摄的照片（3FR / JPG / HEIC）自动写入位置信息，相册 App 中即可直接查看拍摄地点。
+
+![取景界面 GPS 图标](assets/screenshots/gps1.jpg)
+![定位状态与写入开关](assets/screenshots/gps2.jpg)
+![相册中显示拍摄地点](assets/screenshots/gps3.jpg)
 
 ### 直连无线打印机
 
